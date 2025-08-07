@@ -11,6 +11,8 @@ obj-$(CONFIG_REGULATOR_VIRTUAL_CONSUMER) += virtual.o
 obj-$(CONFIG_REGULATOR_USERSPACE_CONSUMER) += userspace-consumer.o
 
 obj-$(CONFIG_REGULATOR_MA35D1) += ma35d1-regulator.o
+obj-$(CONFIG_REGULATOR_MA35D0) += ma35d0-regulator.o
+obj-$(CONFIG_REGULATOR_MA35H0) += ma35h0-regulator.o
 obj-$(CONFIG_REGULATOR_88PG86X) += 88pg86x.o
 obj-$(CONFIG_REGULATOR_88PM800) += 88pm800-regulator.o
 obj-$(CONFIG_REGULATOR_88PM8607) += 88pm8607.o

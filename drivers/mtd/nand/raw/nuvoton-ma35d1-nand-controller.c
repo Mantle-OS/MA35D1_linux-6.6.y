@@ -1008,14 +1008,14 @@ static void ma35_nand_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id ma35_nand_of_match[] = {
-	{ .compatible = "nuvoton,ma35d1-nand" },
+	{ .compatible = "nuvoton,ma35-nand" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, ma35_nand_of_match);
 
 static struct platform_driver ma35_nand_driver = {
 	.driver = {
-		.name = "ma35d1-nand",
+		.name = "ma35-nand",
 		.of_match_table = ma35_nand_of_match,
 	},
 	.probe = ma35_nand_probe,

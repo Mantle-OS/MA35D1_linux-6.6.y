@@ -1123,7 +1123,7 @@
 	};
 
 	nand:nand@401A0000 {
-		compatible = "nuvoton,ma35d1-nand";
+		compatible = "nuvoton,ma35-nand";
 		reg = <0x0 0x401A0000 0x0 0x1000>;
 		interrupts = <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>;	/* 70-32 */
 		nuvoton,sys = <&sys>;
@@ -1132,7 +1132,8 @@
 		clocks = <&clk NAND_GATE>;
 		clock-names = "nand_gate";
 		status = "disabled";
-
+		#address-cells = <1>;
+		#size-cells = <0>;
 		nand@0 {
 			reg = <0>;
 			nand-ecc-mode = "hw_oob_first";
@@ -1185,7 +1186,7 @@
 	};
 
 	usb_phy: usb-phy {
-		compatible = "nuvoton,ma35d1-usb2-phy";
+		compatible = "nuvoton,ma35-usb2-phy";
 		clocks = <&clk USBD_GATE>;
 		clock-names = "usbd_gate";
 		clock-enable = "usbd_gate";

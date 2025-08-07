@@ -124,7 +124,7 @@ static int ma35_usb_phy_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id ma35_usb_phy_of_match[] = {
-	{ .compatible = "nuvoton,ma35d1-usb2-phy", },
+	{ .compatible = "nuvoton,ma35-usb2-phy", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, ma35_usb_phy_of_match);

@@ -102,8 +102,8 @@ struct ma35h0_dmadev {
 	unsigned int irq;
 	int nr_chans;
 
-        /* To protect channel manipulation */
-        spinlock_t lock;
+	/* To protect channel manipulation */
+	spinlock_t lock;
 };
 
 static struct device *chan2dev(struct dma_chan *chan)
@@ -142,10 +142,10 @@ static int ma35h0_terminate_all(struct dma_chan *chan)
 		ch->desc = NULL;
 	}
 
-	spin_lock_irqsave(&ch->edma->lock,flags);
+	spin_lock_irqsave(&ch->edma->lock, flags);
 	val = readl(ch->base + PDMA_CHCTL) & ~(1 << ch->ch_num);
 	writel(val, ch->base + PDMA_CHCTL);
-	spin_unlock_irqrestore(&ch->edma->lock,flags);
+	spin_unlock_irqrestore(&ch->edma->lock, flags);
 
 	vchan_get_all_descriptors(&ch->vc, &head);
 	vchan_dma_desc_free_list(&ch->vc, &head);
@@ -160,7 +160,7 @@ static void ma35h0_set_dma_timeout(struct ma35h0_chan *ch)
 	unsigned long flags;
 	u32 val;
 
-	spin_lock_irqsave(&ch->edma->lock,flags);
+	spin_lock_irqsave(&ch->edma->lock, flags);
 	if (d->pcfg.timeout_prescaler == 0 && d->pcfg.timeout_counter == 0) {
 		/* Disable time-out funciton */
 		val = readl(ch->base + PDMA_TOUTIEN);
@@ -170,7 +170,7 @@ static void ma35h0_set_dma_timeout(struct ma35h0_chan *ch)
 		val = readl(ch->base + PDMA_TOUTEN);
 		val &= ~(1 << ch->ch_num);
 		writel(val, ch->base + PDMA_TOUTEN);
-		spin_unlock_irqrestore(&ch->edma->lock,flags);
+		spin_unlock_irqrestore(&ch->edma->lock, flags);
 		return;
 	}
 
@@ -189,8 +189,7 @@ static void ma35h0_set_dma_timeout(struct ma35h0_chan *ch)
 		writel(val, ch->base + PDMA_TOUTPSC1);
 
 		val = readl(ch->base + PDMA_TOUTPSC1);
-		val |=
-		    ((d->pcfg.timeout_prescaler & 0x7) << (4 * (ch->ch_num - 8)));
+		val |= ((d->pcfg.timeout_prescaler & 0x7) << (4 * (ch->ch_num - 8)));
 		writel(val, ch->base + PDMA_TOUTPSC1);
 	}
 
@@ -199,8 +198,7 @@ static void ma35h0_set_dma_timeout(struct ma35h0_chan *ch)
 	writel(val, ch->base + PDMA_TOC + (4 * (ch->ch_num / 2)));
 
 	val = readl(ch->base + PDMA_TOC + (4 * (ch->ch_num / 2)));
-	val |=
-	    ((d->pcfg.timeout_counter & 0xffff) << (16 * (ch->ch_num % 2)));
+	val |= ((d->pcfg.timeout_counter & 0xffff) << (16 * (ch->ch_num % 2)));
 	writel(val, ch->base + PDMA_TOC + (4 * (ch->ch_num / 2)));
 
 	/* Enable time-out funciton */
@@ -212,7 +210,7 @@ static void ma35h0_set_dma_timeout(struct ma35h0_chan *ch)
 	val = readl(ch->base + PDMA_TOUTIEN);
 	val |= (1 << ch->ch_num);
 	writel(val, ch->base + PDMA_TOUTIEN);
-	spin_unlock_irqrestore(&ch->edma->lock,flags);
+	spin_unlock_irqrestore(&ch->edma->lock, flags);
 }
 
 static void ma35h0_set_transfer_params(struct ma35h0_chan *ch, int reqsel)
@@ -220,13 +218,13 @@ static void ma35h0_set_transfer_params(struct ma35h0_chan *ch, int reqsel)
 	u32 sel, reg;
 	unsigned long flags;
 
-	spin_lock_irqsave(&ch->edma->lock,flags);
+	spin_lock_irqsave(&ch->edma->lock, flags);
 	reg = PDMA_REQSEL + (4 * (ch->ch_num / 4));
 	sel = readl(ch->base + reg);
 	sel &= ~(0xFF << ((ch->ch_num & 0x3) * 8));
 	sel |= (reqsel << ((ch->ch_num & 0x3) * 8));
 	writel(sel, ch->base + reg);
-	spin_unlock_irqrestore(&ch->edma->lock,flags);
+	spin_unlock_irqrestore(&ch->edma->lock, flags);
 }
 
 static void ma35h0_set_channel_params(struct ma35h0_chan *ch)
@@ -234,7 +232,7 @@ static void ma35h0_set_channel_params(struct ma35h0_chan *ch)
 	u32 reg, val;
 	unsigned long flags;
 
-	spin_lock_irqsave(&ch->edma->lock,flags);
+	spin_lock_irqsave(&ch->edma->lock, flags);
 	if ((readl(ch->base + ch->ch_num * 16) & 0x3) != 0) {
 		reg = readl(ch->base + PDMA_CHCTL);
 		writel(0, ch->base + ch->ch_num * 16);
@@ -249,11 +247,10 @@ static void ma35h0_set_channel_params(struct ma35h0_chan *ch)
 	}
 	val = readl(ch->base + PDMA_INTEN) | (1 << ch->ch_num);
 	writel(val, ch->base + PDMA_INTEN);
-	spin_unlock_irqrestore(&ch->edma->lock,flags);
+	spin_unlock_irqrestore(&ch->edma->lock, flags);
 }
 
-static int ma35h0_slave_config(struct dma_chan *chan,
-			       struct dma_slave_config *cfg)
+static int ma35h0_slave_config(struct dma_chan *chan, struct dma_slave_config *cfg)
 {
 	struct ma35h0_chan *ch = to_ma35h0_dma_chan(chan);
 	enum dma_slave_buswidth width;
@@ -291,12 +288,9 @@ static int ma35h0_slave_config(struct dma_chan *chan,
 	return 0;
 }
 
-static struct dma_async_tx_descriptor *ma35h0_prep_dma_memcpy(
-	struct dma_chan *chan,
-	dma_addr_t dst,
-	dma_addr_t src,
-	size_t len,
-	unsigned long tx_flags)
+static struct dma_async_tx_descriptor *ma35h0_prep_dma_memcpy(struct dma_chan *chan, dma_addr_t dst,
+							      dma_addr_t src, size_t len,
+							      unsigned long tx_flags)
 {
 	struct ma35h0_chan *ch = to_ma35h0_dma_chan(chan);
 	struct ma35h0_desc *d;
@@ -313,11 +307,8 @@ static struct dma_async_tx_descriptor *ma35h0_prep_dma_memcpy(
 	ma35h0_set_channel_params(ch);
 	ma35h0_set_transfer_params(ch, d->pcfg.reqsel);
 	d->sg_addr =
-	    dma_map_single(ch->dev, d->sg, sizeof(struct ma35h0_sg) * sg_len,
-			   DMA_TO_DEVICE);
-	writel(d->sg_addr,
-	       ch->base + (ch->ch_num * PDMA_OFFSET_CHAN_SIZE) +
-	       PDMA_DSCT_NEXT);
+	    dma_map_single(ch->dev, d->sg, sizeof(struct ma35h0_sg) * sg_len, DMA_TO_DEVICE);
+	writel(d->sg_addr, ch->base + (ch->ch_num * PDMA_OFFSET_CHAN_SIZE) + PDMA_DSCT_NEXT);
 
 	for (i = 0; i < sg_len; i++) {
 		bytes = min_t(size_t, len, PDMA_MAX_CHAN_BYTES);
@@ -330,8 +321,7 @@ static struct dma_async_tx_descriptor *ma35h0_prep_dma_memcpy(
 		len -= tlen;
 		d->sg[i].next = d->sg_addr + (16 * (i + 1) + 4);
 	}
-	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg),
-				DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg), DMA_TO_DEVICE);
 	d->sglen = sg_len;
 	d->sg[d->sglen - 1].ctl &= ~(PDMA_OP_MSK | PDMA_TBINTDIS);
 	d->sg[d->sglen - 1].ctl |= PDMA_OP_BASIC;
@@ -341,13 +331,11 @@ static struct dma_async_tx_descriptor *ma35h0_prep_dma_memcpy(
 	return vchan_tx_prep(&ch->vc, &d->vd, tx_flags);
 }
 
-static struct dma_async_tx_descriptor *ma35h0_prep_slave_sg(
-	struct dma_chan *chan,
-	struct scatterlist *sgl,
-	unsigned int sg_len,
-	enum dma_transfer_direction dir,
-	unsigned long tx_flags,
-	void *context)
+static struct dma_async_tx_descriptor *ma35h0_prep_slave_sg(struct dma_chan *chan,
+							    struct scatterlist *sgl,
+							    unsigned int sg_len,
+							    enum dma_transfer_direction dir,
+							    unsigned long tx_flags, void *context)
 {
 	struct ma35h0_chan *ch = to_ma35h0_dma_chan(chan);
 	struct ma35h0_desc *d;
@@ -355,8 +343,7 @@ static struct dma_async_tx_descriptor *ma35h0_prep_slave_sg(
 	unsigned int i;
 
 	if (!is_slave_direction(dir)) {
-		dev_err(chan2dev(chan), "%s: invalid DMA direction\n",
-			__func__);
+		dev_err(chan2dev(chan), "%s: invalid DMA direction\n", __func__);
 		return NULL;
 	}
 
@@ -367,8 +354,7 @@ static struct dma_async_tx_descriptor *ma35h0_prep_slave_sg(
 	if (ch->cfg.peripheral_size != sizeof(struct ma35h0_peripheral)) {
 		dev_err(chan2dev(chan),
 			"Invalid peripheral size %zu, expected %zu\n",
-			ch->cfg.peripheral_size,
-			sizeof(struct ma35h0_peripheral));
+			ch->cfg.peripheral_size, sizeof(struct ma35h0_peripheral));
 		return NULL;
 	}
 
@@ -377,16 +363,12 @@ static struct dma_async_tx_descriptor *ma35h0_prep_slave_sg(
 	ma35h0_set_transfer_params(ch, d->pcfg.reqsel);
 	d->sg_addr = (u32) dma_map_single(ch->dev,
 					  (void *)(d->sg),
-					  sizeof(struct ma35h0_sg) * sg_len,
-					  DMA_BIDIRECTIONAL);
-	writel(d->sg_addr,
-	       ch->base + (ch->ch_num * PDMA_OFFSET_CHAN_SIZE) +
-	       PDMA_DSCT_NEXT);
+					  sizeof(struct ma35h0_sg) * sg_len, DMA_BIDIRECTIONAL);
+	writel(d->sg_addr, ch->base + (ch->ch_num * PDMA_OFFSET_CHAN_SIZE) + PDMA_DSCT_NEXT);
 	for_each_sg(sgl, sgent, sg_len, i) {
 		d->sg[i].ctl =
 		    (ch->runtime_ctrl |
-		     PDMA_TXCNT(sg_dma_len(sgent) -
-				1UL) | PDMA_TBINTDIS | PDMA_OP_SCATTER);
+		     PDMA_TXCNT(sg_dma_len(sgent) - 1UL) | PDMA_TBINTDIS | PDMA_OP_SCATTER);
 		if (dir == DMA_MEM_TO_DEV) {
 			d->sg[i].src = sg_dma_address(sgent);
 			d->sg[i].dst = ch->runtime_addr;
@@ -402,21 +384,18 @@ static struct dma_async_tx_descriptor *ma35h0_prep_slave_sg(
 	d->sglen = sg_len;
 	d->sg[d->sglen - 1].ctl &= ~(PDMA_OP_MSK | PDMA_TBINTDIS);
 	d->sg[d->sglen - 1].ctl |= PDMA_OP_BASIC;
-	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg) * d->sglen,
-				DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg) * d->sglen, DMA_TO_DEVICE);
 	d->cyclic = false;
 	ch->error = 0;
 
 	return vchan_tx_prep(&ch->vc, &d->vd, tx_flags);
 }
 
-static struct dma_async_tx_descriptor *ma35h0_prep_dma_cyclic(
-	struct dma_chan *chan,
-	dma_addr_t dma_addr,
-	size_t buf_len,
-	size_t period_len,
-	enum dma_transfer_direction dir,
-	unsigned long flags)
+static struct dma_async_tx_descriptor *ma35h0_prep_dma_cyclic(struct dma_chan *chan,
+							      dma_addr_t dma_addr, size_t buf_len,
+							      size_t period_len,
+							      enum dma_transfer_direction dir,
+							      unsigned long flags)
 {
 	struct ma35h0_chan *ch = to_ma35h0_dma_chan(chan);
 	struct ma35h0_desc *d;
@@ -424,8 +403,7 @@ static struct dma_async_tx_descriptor *ma35h0_prep_dma_cyclic(
 	size_t offset = 0;
 
 	if (period_len > PDMA_MAX_CHAN_BYTES) {
-		dev_warn(chan2dev(chan), "too big period length %zu\n",
-			 period_len);
+		dev_warn(chan2dev(chan), "too big period length %zu\n", period_len);
 		return NULL;
 	}
 
@@ -439,17 +417,13 @@ static struct dma_async_tx_descriptor *ma35h0_prep_dma_cyclic(
 	ma35h0_set_transfer_params(ch, d->pcfg.reqsel);
 	d->sg_addr = (u32) dma_map_single(ch->dev,
 					  (void *)(d->sg),
-					  sizeof(struct ma35h0_sg) * sg_len,
-					  DMA_BIDIRECTIONAL);
+					  sizeof(struct ma35h0_sg) * sg_len, DMA_BIDIRECTIONAL);
 
-	writel(d->sg_addr,
-	       ch->base + (ch->ch_num * PDMA_OFFSET_CHAN_SIZE) +
-	       PDMA_DSCT_NEXT);
+	writel(d->sg_addr, ch->base + (ch->ch_num * PDMA_OFFSET_CHAN_SIZE) + PDMA_DSCT_NEXT);
 	/* Split the buffer into period size chunks */
 	for (offset = 0, i = 0; offset < buf_len; offset += period_len, i++) {
 		d->sg[i].ctl = (ch->runtime_ctrl |
-		     PDMA_TXCNT((period_len/ch->runtime_width)-1) |
-		     PDMA_OP_SCATTER);
+				PDMA_TXCNT((period_len / ch->runtime_width) - 1) | PDMA_OP_SCATTER);
 		if (dir == DMA_MEM_TO_DEV) {
 			d->sg[i].src = dma_addr + offset;
 			d->sg[i].dst = ch->runtime_addr;
@@ -464,15 +438,13 @@ static struct dma_async_tx_descriptor *ma35h0_prep_dma_cyclic(
 	}
 	d->sglen = sg_len;
 	d->sg[d->sglen - 1].next = d->sg_addr;
-	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg) * d->sglen,
-				DMA_FROM_DEVICE);
+	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg) * d->sglen, DMA_TO_DEVICE);
 	d->cyclic = true;
 	ch->error = 0;
 	return vchan_tx_prep(&ch->vc, &d->vd, flags);
 }
 
-static struct dma_chan *ma35h0_of_xlate(struct of_phandle_args *dma_spec,
-					struct of_dma *of)
+static struct dma_chan *ma35h0_of_xlate(struct of_phandle_args *dma_spec, struct of_dma *of)
 {
 	struct ma35h0_dmadev *edma = of->of_dma_data;
 	unsigned int request;
@@ -491,8 +463,7 @@ static int ma35h0_alloc_chan_resources(struct dma_chan *chan)
 {
 	struct ma35h0_chan *ch = to_ma35h0_dma_chan(chan);
 
-	dev_dbg(chan2dev(chan), "%s: allocating channel #%u\n",
-		__func__, ch->ch_num);
+	dev_dbg(chan2dev(chan), "%s: allocating channel #%u\n", __func__, ch->ch_num);
 	ch->allocated = 1;
 
 	return 0;
@@ -503,8 +474,7 @@ static void ma35h0_free_chan_resources(struct dma_chan *chan)
 	struct ma35h0_chan *ch = to_ma35h0_dma_chan(chan);
 
 	vchan_free_chan_resources(&ch->vc);
-	dev_dbg(chan2dev(chan), "%s: freeing channel #%u\n",
-		__func__, ch->ch_num);
+	dev_dbg(chan2dev(chan), "%s: freeing channel #%u\n", __func__, ch->ch_num);
 	ch->allocated = 0;
 }
 
@@ -567,8 +537,7 @@ static void ma35h0_issue_pending(struct dma_chan *chan)
 	spin_unlock_irqrestore(&ch->vc.lock, flags);
 }
 
-static enum dma_status ma35h0_tx_status(struct dma_chan *chan,
-					dma_cookie_t cookie,
+static enum dma_status ma35h0_tx_status(struct dma_chan *chan, dma_cookie_t cookie,
 					struct dma_tx_state *txstate)
 {
 
@@ -611,9 +580,7 @@ static irqreturn_t ma35h0_dma_interrupt(int irq, void *devid)
 
 		/* Timeout interrupt */
 		if (intsts & (1 << (i + 8))) {
-			val =
-			    readl(ch->base +
-				  ch->ch_num * PDMA_OFFSET_CHAN_SIZE);
+			val = readl(ch->base + ch->ch_num * PDMA_OFFSET_CHAN_SIZE);
 			ch->remain = PDMA_GET_TXCNT(val);
 			val = readl(ch->base + PDMA_TOUTEN);
 			val &= ~(1 << i);
@@ -637,8 +604,7 @@ static irqreturn_t ma35h0_dma_interrupt(int irq, void *devid)
 
 static void ma35h0_dma_release(struct dma_device *dma_dev)
 {
-	struct ma35h0_dmadev *edma =
-		container_of(dma_dev, struct ma35h0_dmadev, ddev);
+	struct ma35h0_dmadev *edma = container_of(dma_dev, struct ma35h0_dmadev, ddev);
 
 	put_device(edma->ddev.dev);
 	kfree(edma);
@@ -711,8 +677,7 @@ static int ma35h0_probe(struct platform_device *pdev)
 	    BIT(DMA_SLAVE_BUSWIDTH_2_BYTES) | BIT(DMA_SLAVE_BUSWIDTH_1_BYTE);
 	edma->ddev.dst_addr_widths = BIT(DMA_SLAVE_BUSWIDTH_4_BYTES) |
 	    BIT(DMA_SLAVE_BUSWIDTH_2_BYTES) | BIT(DMA_SLAVE_BUSWIDTH_1_BYTE);
-	edma->ddev.directions = BIT(DMA_MEM_TO_DEV) | BIT(DMA_DEV_TO_MEM) |
-	    BIT(DMA_MEM_TO_MEM);
+	edma->ddev.directions = BIT(DMA_MEM_TO_DEV) | BIT(DMA_DEV_TO_MEM) | BIT(DMA_MEM_TO_MEM);
 
 	spin_lock_init(&edma->lock);
 	INIT_LIST_HEAD(&edma->ddev.channels);
@@ -732,8 +697,7 @@ static int ma35h0_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, edma);
 
-	ret = devm_request_irq(dev, irq, ma35h0_dma_interrupt, 0,
-			       pdev->name, edma);
+	ret = devm_request_irq(dev, irq, ma35h0_dma_interrupt, 0, pdev->name, edma);
 	if (ret) {
 		dev_err(dev, "devm_request_irq failed\n");
 		return ret;
@@ -762,9 +726,7 @@ static int ma35h0_remove(struct platform_device *pdev)
 	struct ma35h0_dmadev *m = platform_get_drvdata(pdev);
 
 	devm_free_irq(&pdev->dev, m->irq, m);
-
 	dma_async_device_unregister(&m->ddev);
-
 	if (pdev->dev.of_node)
 		of_dma_controller_free(pdev->dev.of_node);
 

@@ -957,7 +957,7 @@
 	};
 
 	nand:nand@401A0000 {
-		compatible = "nuvoton,ma35d0-nand";
+		compatible = "nuvoton,ma35-nand";
 		reg = <0x0 0x401A0000 0x0 0x1000>;
 		interrupts = <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>;	/* 70-32 */
 		nuvoton,sys = <&sys>;
@@ -966,39 +966,43 @@
 		clocks = <&clk NAND_GATE>;
 		clock-names = "nand_gate";
 		status = "disabled";
-		nand-ecc-mode = "hw_oob_first";
-		nand-ecc-algo = "bch";
-		nand-bus-width = <8>;
-		nand-ecc-strength = <8>;
-		nand-ecc-step-size = <512>;
-		nand-on-flash-bbt;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		nand@0 {
+			reg = <0>;
+			nand-ecc-mode = "hw_oob_first";
+			nand-ecc-algo = "bch";
+			nand-bus-width = <8>;
+			nand-ecc-strength = <8>;
+			nand-ecc-step-size = <512>;
+			nand-on-flash-bbt;
 
+			partitions {
+				compatible = "fixed-partitions";
+				#address-cells = <1>;
+				#size-cells = <1>;
 
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			uboot@0 {
-				label = "nand-uboot";
-				reg = <0x0000000 0x300000>;
-				read-only;
-			};
-			uboot-env@300000 {
-				label = "nand-uboot-env";
-				reg = <0x300000 0xC0000>;
-			};
-			device-tree@3c0000 {
-				label = "nand-device-tree";
-				reg = <0x3C0000 0x40000>;
-			};
-			kernel@400000 {
-				label = "nand-kernel";
-				reg = <0x400000 0x1800000>;
-			};
-			rootfs@1c00000 {
-				label = "nand-rootfs";
-				reg = <0x1C00000 0x6400000>;
+				uboot@0 {
+					label = "nand-uboot";
+					reg = <0x0000000 0x300000>;
+					read-only;
+				};
+				uboot-env@300000 {
+					label = "nand-uboot-env";
+					reg = <0x300000 0xC0000>;
+				};
+				device-tree@3c0000 {
+					label = "nand-device-tree";
+					reg = <0x3C0000 0x40000>;
+				};
+				kernel@400000 {
+					label = "nand-kernel";
+					reg = <0x400000 0x1800000>;
+				};
+				rootfs@1c00000 {
+					label = "nand-rootfs";
+					reg = <0x1C00000 0x6400000>;
+				};
 			};
 		};
 	};
@@ -1016,7 +1020,7 @@
 	};
 
 	usb_phy: usb-phy {
-		compatible = "nuvoton,ma35d0-usb-phy";
+		compatible = "nuvoton,ma35-usb2-phy";
 		clocks = <&clk USBD_GATE>;
 		clock-names = "usbd_gate";
 		clock-enable = "usbd_gate";
@@ -1469,7 +1473,7 @@
 		nuvoton,clk = <&clk>;
 		clocks = <&clk DCU_GATE>, <&clk DCUP_DIV>;
 		clock-names = "dcu_gate", "dcup_div";
-		resets = <&reset MA35D1_RESET_DISP>;
+		resets = <&reset MA35D0_RESET_DISP>;
 		status = "disabled";
 
 		layers {
