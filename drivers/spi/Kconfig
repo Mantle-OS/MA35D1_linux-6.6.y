@@ -616,6 +616,30 @@ config SPI_FSL_ESPI
 	  From MPC8536, 85xx platform uses the controller, and all P10xx,
 	  P20xx, P30xx,P40xx, P50xx uses this controller.
 
+config SPI_MA35D0_QSPI
+	tristate "Nuvoton MA35D0 QSPI Controller"
+	help
+	  This driver provides support for Nuvoton MA35D0
+	  QSPI controller in master mode.
+
+config SPI_MA35D0_SPI
+	tristate "Nuvoton MA35D0 SPI Controller"
+	help
+	  This driver provides support for Nuvoton MA35D0
+	  SPI controller in master mode.
+
+config SPI_MA35H0_QSPI
+	tristate "Nuvoton MA35H0 QSPI Controller"
+	help
+	  This driver provides support for Nuvoton MA35H0
+	  QSPI controller in master mode.
+
+config SPI_MA35H0_SPI
+	tristate "Nuvoton MA35H0 SPI Controller"
+	help
+	  This driver provides support for Nuvoton MA35H0
+	  SPI controller in master mode.
+
 config SPI_MA35D1_QSPI
 	tristate "Nuvoton MA35D1 QSPI Controller"
 	help
