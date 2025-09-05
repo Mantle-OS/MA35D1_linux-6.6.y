@@ -1238,7 +1238,7 @@
 		compatible = "nuvoton,ma35d1-ccap";
 		reg = <0x0 0x40240000 0x0 0x2000>;
 		interrupts = <GIC_SPI 21 IRQ_TYPE_LEVEL_HIGH>;
-		status = "okay";
+		status = "disabled";
 	};
 
 	ccap1: ccap@40250000{

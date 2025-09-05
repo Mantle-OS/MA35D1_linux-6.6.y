@@ -2,7 +2,7 @@
 /*
  * Nuvoton MA35D1 pintctrl driver
  *
- * Copyright (C) 2023 Nuvoton Technology Corp.
+ * Copyright (C) 2025 Nuvoton Technology Corp.
  *
  * Author: Shan-Chun Hung <schung@nuvoton.com>
  */
@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/regmap.h>
 #include <linux/gpio/driver.h>
+#include <linux/interrupt.h>
 
 #include "../core.h"
 #include "../pinconf.h"
@@ -323,6 +324,23 @@ static int nvt_gpio_core_get(struct gpio_chip *gc, unsigned int gpio_num)
 	return GPIO_PIN_DATA(base, gpio_num);
 }
 
+static int nvt_gpio_core_direction_in(struct gpio_chip *gc, unsigned int gpio_num)
+{
+	unsigned long flags;
+	unsigned int value;
+	struct nvt_pin_bank *bank = gpiochip_get_data(gc);
+	void __iomem *base = bank->reg_base;
+
+	spin_lock_irqsave(&bank->lock, flags);
+	value = readl(base + GPIO_MODE);
+	value &= ~GPIO_SET_MODE(gpio_num, GPIO_MODE_QUASI);
+	value |= GPIO_SET_MODE(gpio_num, GPIO_MODE_INPUT);
+	writel(value, base + GPIO_MODE);
+	spin_unlock_irqrestore(&bank->lock, flags);
+
+	return 0;
+}
+
 static int nvt_gpio_core_to_request(struct gpio_chip *gc, unsigned int gpio_num)
 {
 	unsigned int reg, reg_offset;
@@ -346,23 +364,6 @@ static int nvt_gpio_core_to_request(struct gpio_chip *gc, unsigned int gpio_num)
 	return 0;
 }
 
-static int nvt_gpio_core_direction_in(struct gpio_chip *gc, unsigned int gpio_num)
-{
-	unsigned long flags;
-	unsigned int value;
-	struct nvt_pin_bank *bank = gpiochip_get_data(gc);
-	void __iomem *base = bank->reg_base;
-
-	spin_lock_irqsave(&bank->lock, flags);
-	value = readl(base + GPIO_MODE);
-	value &= ~GPIO_SET_MODE(gpio_num, GPIO_MODE_QUASI);
-	value |= GPIO_SET_MODE(gpio_num, GPIO_MODE_INPUT);
-	writel(value, base + GPIO_MODE);
-	spin_unlock_irqrestore(&bank->lock, flags);
-
-	return 0;
-}
-
 static void nvt_irq_gpio_mask(struct irq_data *d)
 {
 	unsigned int num = (d->hwirq);
@@ -373,6 +374,22 @@ static void nvt_irq_gpio_mask(struct irq_data *d)
 		     (unsigned int *)(bank->reg_base + 0x1C));
 	writel(readl((unsigned int *)(bank->reg_base + 0x1C)) &
 		     ~(0x1 << num), (unsigned int *)(bank->reg_base + 0x1C));
+}
+
+static void nvt_irq_gpio_unmask(struct irq_data *d)
+{
+	unsigned int num = (d->hwirq);
+	struct nvt_pin_bank *bank = gpiochip_get_data(irq_data_get_irq_chip_data(d));
+	unsigned int tmp = bank->irqtype & (0x1 << (num));
+
+	writel(readl((unsigned int *)(bank->reg_base + 0x18)) | tmp,
+		     (unsigned int *)(bank->reg_base + 0x18));
+	tmp = bank->irqinten & (0x1 << (num + 16));
+	writel(readl((unsigned int *)(bank->reg_base + 0x1C)) | tmp,
+		     (unsigned int *)(bank->reg_base + 0x1C));
+	tmp = bank->irqinten & (0x1 << num);
+	writel(readl((unsigned int *)(bank->reg_base + 0x1C)) | tmp,
+		     (unsigned int *)(bank->reg_base + 0x1C));
 }
 
 static int nvt_irq_irqtype(struct irq_data *d, unsigned int type)
@@ -460,30 +477,13 @@ static int nvt_irq_irqtype(struct irq_data *d, unsigned int type)
 	return 0;
 }
 
-static void nvt_irq_gpio_unmask(struct irq_data *d)
-{
-	unsigned int num = (d->hwirq);
-	struct nvt_pin_bank *bank = gpiochip_get_data(irq_data_get_irq_chip_data(d));
-	unsigned int tmp = bank->irqtype & (0x1 << (num));
-
-	writel(readl((unsigned int *)(bank->reg_base + 0x18)) | tmp,
-		     (unsigned int *)(bank->reg_base + 0x18));
-	tmp = bank->irqinten & (0x1 << (num + 16));
-	writel(readl((unsigned int *)(bank->reg_base + 0x1C)) | tmp,
-		     (unsigned int *)(bank->reg_base + 0x1C));
-	tmp = bank->irqinten & (0x1 << num);
-	writel(readl((unsigned int *)(bank->reg_base + 0x1C)) | tmp,
-		     (unsigned int *)(bank->reg_base + 0x1C));
-}
-
-static void nvt_irq_demux_intgroup(struct irq_desc *desc)
+static irqreturn_t nvt_irq_demux_intgroup(int irq, void *data)
 {
 	unsigned int j, isr;
-	struct nvt_pin_bank *bank = gpiochip_get_data(irq_desc_get_handler_data(desc));
-	struct irq_chip *irqchip = irq_desc_get_chip(desc);
+	struct gpio_chip *gc = (struct gpio_chip *)data;
+	struct nvt_pin_bank *bank = gpiochip_get_data(gc);
 	struct irq_domain *irqdomain = bank->chip.irq.domain;
 
-	chained_irq_enter(irqchip, desc);
 	isr = readl(bank->reg_base + GPIO_INTSRC);
 	if (isr != 0) {
 		writel(isr, bank->reg_base + GPIO_INTSRC);
@@ -494,8 +494,17 @@ static void nvt_irq_demux_intgroup(struct irq_desc *desc)
 			isr = isr >> 1;
 		}
 	}
-	chained_irq_exit(irqchip, desc);
+	return IRQ_HANDLED;
+}
 
+static int nvt_irq_set_wake(struct irq_data *d, unsigned int on)
+{
+	if (on)
+		nvt_irq_gpio_unmask(d);
+	else
+		nvt_irq_gpio_mask(d);
+
+	return 0;
 }
 
 static int nvt_gpiolib_register(struct platform_device *pdev, struct nvt_pinctrl *npctl)
@@ -531,13 +540,14 @@ static int nvt_gpiolib_register(struct platform_device *pdev, struct nvt_pinctrl
 
 			girq->chip = &bank->irqc;
 			girq->chip->name = bank->name;
-			girq->chip->irq_enable = nvt_irq_gpio_unmask;
-			girq->chip->irq_disable = nvt_irq_gpio_mask;
 			girq->chip->irq_set_type = nvt_irq_irqtype;
 			girq->chip->irq_unmask = nvt_irq_gpio_unmask;
+			girq->chip->irq_enable = nvt_irq_gpio_unmask;
+			girq->chip->irq_disable = nvt_irq_gpio_mask;
 			girq->chip->irq_mask = nvt_irq_gpio_mask;
+			girq->chip->irq_set_wake = nvt_irq_set_wake;
 			girq->chip->flags = IRQCHIP_ENABLE_WAKEUP_ON_SUSPEND | IRQCHIP_IMMUTABLE;
-			girq->parent_handler = nvt_irq_demux_intgroup;
+			girq->parent_handler = NULL;
 			girq->num_parents = 1;
 			girq->parents = devm_kcalloc(&pdev->dev, 1, sizeof(*girq->parents),
 					GFP_KERNEL);
@@ -546,6 +556,14 @@ static int nvt_gpiolib_register(struct platform_device *pdev, struct nvt_pinctrl
 			girq->parents[0] = bank->irq;
 			girq->default_type = IRQ_TYPE_NONE;
 			girq->handler = handle_level_irq;
+
+			ret = devm_request_irq(bank->dev, bank->irq, nvt_irq_demux_intgroup,
+						   IRQF_SHARED, bank->name, &bank->chip);
+			if (ret) {
+				dev_err(&pdev->dev, "Unable to request IRQ%d: %d\n",
+					bank->irq, ret);
+				return ret;
+			}
 		}
 		ret = gpiochip_add_data(&bank->chip, bank);
 		if (ret) {

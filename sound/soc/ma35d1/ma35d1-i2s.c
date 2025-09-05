@@ -252,15 +252,9 @@ static void ma35d1_i2s_enable(struct ma35d1_i2s_info *info, int stream)
 		/* Enable i2s */
 		val |= I2S_EN;
 		val |= MCLKEN;
+
+		ma35d1_i2s_write_reg(info, I2S_CTL0, val);
 	}
-
-	/* Enable TX or RX */
-	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
-		val |= TX_EN | TXPDMAEN;
-	else
-		val |= RX_EN | RXPDMAEN;
-
-	ma35d1_i2s_write_reg(info, I2S_CTL0, val);
 }
 
 static void ma35d1_i2s_disable(struct ma35d1_i2s_info *info, int stream)

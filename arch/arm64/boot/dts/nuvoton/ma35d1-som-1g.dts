@@ -36,10 +36,6 @@
 			reg = <0x0 0x8A000000 0x0 0x800000>; /* 8MiB */
 			no-map;
 		};
-		rproc_buf: rproc_buf@0 {
-			reg = <0x0 0x80020000 0x0 0x60000>; /* 384KB */
-			no-map;
-		};
 	};
 
 	gpio_keys_test {

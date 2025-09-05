@@ -438,7 +438,7 @@ static struct dma_async_tx_descriptor *ma35d0_prep_dma_cyclic(struct dma_chan *c
 	}
 	d->sglen = sg_len;
 	d->sg[d->sglen - 1].next = d->sg_addr;
-	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg) * d->sglen, DMA_TO_DEVICE);
+	dma_sync_single_for_cpu(ch->dev, d->sg_addr, sizeof(*d->sg) * d->sglen, DMA_FROM_DEVICE);
 	d->cyclic = true;
 	ch->error = 0;
 	return vchan_tx_prep(&ch->vc, &d->vd, flags);

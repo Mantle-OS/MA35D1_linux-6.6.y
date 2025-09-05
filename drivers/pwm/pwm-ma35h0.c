@@ -44,6 +44,7 @@
 struct nuvoton_pwm {
 	struct pwm_chip chip;
 	void __iomem *base;
+	struct clk *clk;
 	u64 clkrate;
 };
 
@@ -138,37 +139,34 @@ static int nuvoton_pwm_probe(struct platform_device *pdev)
 {
 	struct pwm_chip *chip;
 	struct nuvoton_pwm *nvtpwm;
-	struct clk *clk;
 	int ret;
 
-	printk("Enter nuvoton_pwm_probe.... \n");
+	nvtpwm = devm_kzalloc(&pdev->dev, sizeof(*nvtpwm), GFP_KERNEL);
+	if (IS_ERR(nvtpwm))
+		return PTR_ERR(nvtpwm);
 
-	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
-	if (IS_ERR(chip))
-		return PTR_ERR(chip);
-
-	nvtpwm = to_nuvoton_pwm(chip);
-
+	chip = &nvtpwm->chip;
 	nvtpwm->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(nvtpwm->base))
 		return PTR_ERR(nvtpwm->base);
 
-	clk = devm_clk_get_enabled(&pdev->dev, NULL);
-	if (IS_ERR(clk))
-		return dev_err_probe(&pdev->dev, PTR_ERR(clk), "unable to get the clock");
+	nvtpwm->clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	if (IS_ERR(nvtpwm->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(nvtpwm->clk), "unable to get the clock");
 
-	nvtpwm->clkrate = clk_get_rate(clk);
+	nvtpwm->clkrate = clk_get_rate(nvtpwm->clk);
 	if (nvtpwm->clkrate > NSEC_PER_SEC)
 		return dev_err_probe(&pdev->dev, -EINVAL, "pwm clock out of range");
 
 	chip->dev = &pdev->dev;
 	chip->ops = &nuvoton_pwm_ops;
 	chip->npwm = MA35H0_PWM_TOTAL_CHANNELS;
-	//chip->ops = &nuvoton_pwm_ops;
 
 	ret = devm_pwmchip_add(&pdev->dev, chip);
 	if (ret < 0)
 		return dev_err_probe(&pdev->dev, ret, "unable to add pwm chip");
+
+	platform_set_drvdata(pdev, nvtpwm);
 
 	return 0;
 }
