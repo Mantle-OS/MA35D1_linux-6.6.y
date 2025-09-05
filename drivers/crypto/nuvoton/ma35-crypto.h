@@ -399,55 +399,56 @@ struct nu_sha_dev;
 
 struct nu_sha_ctx {
 	struct nu_sha_dev  *dd;
-	u32	    hash_mode;
-	int	    hmac_key_len;	   /* HMAC key length in bytes       */
-	int	    keybufcnt;
-	u8	    keybuf[HMAC_KEY_BUFF_SIZE] __aligned(32);
-	int         bufcnt;                /* byte count in buffer           */
-	u8	    buffer[SHA_BUFF_SIZE] __aligned(32); /* data buffer      */
-	dma_addr_t  dma_buff;		   /* DMA mapping address of buffer[]*/
-	u8	    fdbck[SHA_FDBCK_SIZE] __aligned(32); /* feedback buffer  */
-	dma_addr_t  dma_fdbck;		   /* DMA mapping address of fdbck[] */
+	u32        hash_mode;
+	int        hmac_key_len;           /* HMAC key length in bytes       */
+	int        keybufcnt;
+	u8         keybuf[HMAC_KEY_BUFF_SIZE] __aligned(32);
 };
 
 struct nu_sha_reqctx {
 	struct nu_sha_dev  *dd;
-	u32	   flags;
-	u32	   op;
-	u32	   reg_ctl;		   /* SHA control register setting   */
+	u32        tsi_sid;                /* TSI SHA session ID             */
+	u32        flags;
+	u32        op;
+	u32        reg_ctl;                /* SHA control register setting   */
 
-	int	   digest_len;		   /* digest length in bytes	     */
-	int	   block_size;             /* SHA block size		     */
-	int	   dma_max_size;           /* Maximum DMA buffer size used   */
+	int        digest_len;             /* digest length in bytes	     */
+	int        block_size;             /* SHA block size		     */
+	int        dma_max_size;           /* Maximum DMA buffer size used   */
 
 	struct scatterlist  *sg;
 	u32        sg_off;                 /* offset in sg		     */
-	u32        req_len;		   /* remaining data count of request*/
+	u32        req_len;                /* remaining data count of request*/
+
+	int        bufcnt;                 /* byte count in buffer           */
+	u8         *buffer;                /* dma data buffer      */
+	dma_addr_t dma_buff;               /* DMA mapping address of buffer[]*/
+	u8         fdbck[SHA_FDBCK_SIZE] __aligned(32);  /* feedback buffer  */
+	dma_addr_t dma_fdbck;              /* DMA mapping address of fdbck[] */
 };
 
 struct nu_sha_dev {
-	struct list_head	list;
-	struct device		*dev;
-	struct nu_crypto_dev	*nu_cdev;
-	void __iomem		*reg_base;
-	u32			flags;
+	struct list_head        list;
+	struct device           *dev;
+	struct nu_crypto_dev    *nu_cdev;
+	void __iomem            *reg_base;
+	u32                     flags;
 
-	spinlock_t		lock;
+	spinlock_t              lock;
 
-	struct crypto_queue	queue;
-	struct ahash_request	*req;
+	struct crypto_queue     queue;
+	struct ahash_request    *req;
 
-	struct tasklet_struct	done_task;
-	struct tasklet_struct	queue_task;
+	struct tasklet_struct   done_task;
+	struct tasklet_struct   queue_task;
 
 	/*
 	 * for optee client driver
 	 */
-	struct tee_context	*octx;
-	u32			session_id;  /* optee session */
-	struct tee_shm		*shm_pool;
-	u32			*va_shm;
-	u32			crypto_session_id;  /* crypto session */
+	struct tee_context      *octx;
+	u32                     session_id;  /* optee session */
+	struct tee_shm          *shm_pool;
+	u32                     *va_shm;
 };
 
 
@@ -517,21 +518,20 @@ struct nu_ecc_ctx {
 };
 
 struct nu_ecc_dev {
-	struct list_head	list;
-	struct device		*dev;
-	struct nu_crypto_dev	*nu_cdev;
-	void __iomem		*reg_base;
-	spinlock_t		lock;
+	struct list_head     list;
+	struct device        *dev;
+	struct nu_crypto_dev *nu_cdev;
+	void __iomem         *reg_base;
+	spinlock_t           lock;
 
 	/*
 	 * for optee client driver
 	 */
-	struct tee_context	*octx;
-	u32			session_id;  /* optee session */
-	struct tee_shm		*shm_pool;
-	u32			*va_shm;
+	struct tee_context   *octx;
+	u32                  session_id;  /* optee session */
+	struct tee_shm       *shm_pool;
+	u32                  *va_shm;
 };
-
 
 /*-------------------------------------------------------------------------*/
 /*   RSA                                                                   */
@@ -562,7 +562,7 @@ struct nu_ecc_dev {
 struct nu_rsa_ctx {
 	struct nu_rsa_dev  *dd;
 	void __iomem  *reg_base;
-	int	   rsa_bit_len;
+	int        rsa_bit_len;
 
 	u8         buffer[RSA_BUFF_SIZE] __aligned(32);
 	u8	   public_key[RSA_REG_RAM_SIZE];
@@ -573,31 +573,31 @@ struct nu_rsa_ctx {
 };
 
 struct nu_rsa_dev {
-	struct list_head	list;
-	struct device		*dev;
-	struct nu_crypto_dev	*nu_cdev;
-	void __iomem		*reg_base;
+	struct list_head     list;
+	struct device        *dev;
+	struct nu_crypto_dev *nu_cdev;
+	void __iomem         *reg_base;
 
 	/*
 	 * for optee client driver
 	 */
-	struct tee_context	*octx;
-	u32			session_id;  /* optee session */
-	struct tee_shm		*shm_pool;
-	u32			*va_shm;
+	struct tee_context   *octx;
+	u32                  session_id;  /* optee session */
+	struct tee_shm       *shm_pool;
+	u32                  *va_shm;
 };
 
 struct nu_crypto_dev {
-	struct device           *dev;
+	struct device        *dev;
 	struct tee_client_device *tee_cdev;
-	void __iomem            *reg_base;
-	unsigned long           prng;
-	struct nu_aes_dev       aes_dd;
-	struct nu_sha_dev       sha_dd;
-	struct nu_ecc_dev       ecc_dd;
-	struct nu_rsa_dev       rsa_dd;
-	bool                    ecc_ioctl;
-	bool                    rsa_ioctl;
+	void __iomem         *reg_base;
+	unsigned long        prng;
+	struct nu_aes_dev    aes_dd;
+	struct nu_sha_dev    sha_dd;
+	struct nu_ecc_dev    ecc_dd;
+	struct nu_rsa_dev    rsa_dd;
+	bool                 ecc_ioctl;
+	bool                 rsa_ioctl;
 };
 
 /*-------------------------------------------------------------------------*/
