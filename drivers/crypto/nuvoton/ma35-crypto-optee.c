@@ -137,14 +137,12 @@ static int ma35_crypto_optee_probe(struct platform_device *pdev)
 	struct nu_crypto_dev *crypto_dev;
 	int err;
 
-	/* MA35D1 crypto engine clock should be enabled by firmware. */
-
-	crypto_dev = devm_kzalloc(dev, sizeof(*crypto_dev),
-				GFP_KERNEL);
+	crypto_dev = devm_kzalloc(dev, sizeof(*crypto_dev), GFP_KERNEL);
 	if (!crypto_dev)
 		return -ENOMEM;
 
 	dev_set_drvdata(dev, crypto_dev);
+
 	_ma35_crypto_optee_dev = crypto_dev;
 
 	crypto_dev->ecc_ioctl = true;
@@ -204,7 +202,18 @@ static struct platform_driver ma35_crypto_optee_driver = {
 	},
 };
 
-module_platform_driver(ma35_crypto_optee_driver);
+static int __init ma35_crypto_platform_driver_init(void)
+{
+	return platform_driver_register(&ma35_crypto_optee_driver);
+}
+
+static void __exit ma35_crypto_platform_driver_exit(void)
+{
+	platform_driver_unregister(&ma35_crypto_optee_driver);
+}
+
+late_initcall(ma35_crypto_platform_driver_init);
+module_exit(ma35_crypto_platform_driver_exit);
 
 MODULE_AUTHOR("Nuvoton Technology Corporation");
 MODULE_DESCRIPTION("Nuvoton Cryptographic Accelerator OP-TEE");

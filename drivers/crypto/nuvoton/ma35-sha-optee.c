@@ -44,9 +44,6 @@ struct nu_sha_drv {
 	spinlock_t lock;
 };
 
-static int  ma35_optee_sha_open(struct nu_sha_dev *dd);
-static void ma35_optee_sha_close(struct nu_sha_dev *dd);
-
 static struct nu_sha_drv nu_sha = {
 	.dev_list = LIST_HEAD_INIT(nu_sha.dev_list),
 	.lock = __SPIN_LOCK_UNLOCKED(nu_sha.lock),
@@ -678,28 +675,12 @@ static int ma35_sha_cra_init_alg(struct crypto_tfm *tfm, const char *alg_base)
 
 static int ma35_sha_cra_init(struct crypto_tfm *tfm)
 {
-	struct nu_sha_ctx *tctx = crypto_tfm_ctx(tfm);
-	struct nu_sha_dev *dd = ma35_sha_find_dev(tctx);
-
 	// printk("SHA: %s\n", tfm->__crt_alg->cra_driver_name);
-	dd = ma35_sha_find_dev(tctx);
-	if (!dd)
-		return -ENODEV;
-
-	if (ma35_optee_sha_open(dd) != 0)
-		return -ENODEV;
-
 	return ma35_sha_cra_init_alg(tfm, NULL);
 }
 
 static void ma35_sha_cra_exit(struct crypto_tfm *tfm)
 {
-	struct nu_sha_ctx *tctx = crypto_tfm_ctx(tfm);
-	struct nu_sha_dev *dd = ma35_sha_find_dev(tctx);
-
-	dd = ma35_sha_find_dev(tctx);
-	if (dd)
-		ma35_optee_sha_close(dd);
 }
 
 static struct ahash_alg  ma35_sha_algs[] = {
@@ -1118,7 +1099,7 @@ static int optee_ctx_match(struct tee_ioctl_version_data *ver, const void *data)
 		return 0;
 }
 
-static int  ma35_optee_sha_open(struct nu_sha_dev *dd)
+static int  ma35_optee_sha_init(struct nu_sha_dev *dd)
 {
 	struct tee_ioctl_open_session_arg sess_arg;
 	int err;
@@ -1175,7 +1156,7 @@ out_ctx:
 	return err;
 }
 
-static void ma35_optee_sha_close(struct nu_sha_dev *dd)
+static void ma35_optee_sha_exit(struct nu_sha_dev *dd)
 {
 	tee_shm_free(dd->shm_pool);
 	tee_client_close_session(dd->octx, dd->session_id);
@@ -1190,7 +1171,7 @@ int ma35_sha_optee_probe(struct device *dev, struct nu_crypto_dev *crypto_dev)
 
 #ifndef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
 	/* ma35 sha-optee driver cannot pass some corner test of linux run-time test */
-	printk("Please enable CONFIG_CRYPTO_MANAGER_DISABLE_TESTS to have ma35 sha-optee driver support.\n");
+	pr_err("Please enable CONFIG_CRYPTO_MANAGER_DISABLE_TESTS to have ma35 sha-optee driver support.\n");
 	return -EINVAL;
 #endif
 
@@ -1198,6 +1179,11 @@ int ma35_sha_optee_probe(struct device *dev, struct nu_crypto_dev *crypto_dev)
 	sha_dd->nu_cdev = crypto_dev;
 	sha_dd->reg_base = crypto_dev->reg_base;
 	sha_dd->octx = NULL;
+
+	err = ma35_optee_sha_init(sha_dd);
+	if (err)
+		return err;
+
 
 	INIT_LIST_HEAD(&sha_dd->list);
 	spin_lock_init(&sha_dd->lock);
@@ -1266,7 +1252,7 @@ int ma35_sha_optee_remove(struct device *dev, struct nu_crypto_dev *crypto_dev)
 	tasklet_kill(&sha_dd->done_task);
 	tasklet_kill(&sha_dd->queue_task);
 
-	ma35_optee_sha_close(sha_dd);
+	ma35_optee_sha_exit(sha_dd);
 
 	return 0;
 }

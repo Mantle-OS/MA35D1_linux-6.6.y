@@ -687,8 +687,6 @@ static struct nu_ecc_curve _Curve[] = {
 },
 };
 
-static int  optee_ecc_open(struct nu_ecc_dev *dd);
-
 static struct nu_ecc_curve *get_curve(int ecc_curve)
 {
 	int   i;
@@ -962,10 +960,8 @@ static int ma35_ecdh_set_secret(struct crypto_kpp *tfm, const void *buf, unsigne
 
 	ctx->dd = dd;
 
-	if (dd->octx == NULL) {
-		if (optee_ecc_open(dd) != 0)
-			return -ENODEV;
-	}
+	if (dd->octx == NULL)
+		return -ENODEV;
 
 	if ((crypto_ecdh_decode_key(buf, len, &params) < 0) ||
 	    params.key_size > sizeof(u64) * ctx->ndigits) {
@@ -1002,10 +998,8 @@ static int ma35_ecdh_compute_value(struct kpp_request *req)
 	void *buf;
 	int ret;
 
-	if (dd->octx == NULL) {
-		if (optee_ecc_open(dd) != 0)
-			return -ENODEV;
-	}
+	if (dd->octx == NULL)
+		return -ENODEV;
 
 	ctx->dd = dd;
 	ret = ma35_ecc_init_curve(ctx->curve_id, ctx);
@@ -1138,71 +1132,6 @@ static int optee_ctx_match(struct tee_ioctl_version_data *ver, const void *data)
 		return 1;
 	else
 		return 0;
-}
-
-static int optee_ecc_open(struct nu_ecc_dev *dd)
-{
-	struct tee_ioctl_open_session_arg sess_arg;
-	int err;
-
-	err = ma35_crypto_optee_init(dd->nu_cdev);
-	if (err)
-		return err;
-	/*
-	 * Open ECC context with TEE driver
-	 */
-	dd->octx = tee_client_open_context(NULL, optee_ctx_match, NULL, NULL);
-	if (IS_ERR(dd->octx)) {
-		pr_err("%s open context failed, err: %x\n", __func__, sess_arg.ret);
-		return err;
-	}
-
-	/*
-	 * Open ECC session with Crypto Trusted App
-	 */
-	memset(&sess_arg, 0, sizeof(sess_arg));
-	memcpy(sess_arg.uuid, dd->nu_cdev->tee_cdev->id.uuid.b, TEE_IOCTL_UUID_LEN);
-	sess_arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
-	sess_arg.num_params = 0;
-
-	err = tee_client_open_session(dd->octx, &sess_arg, NULL);
-	if ((err < 0) || (sess_arg.ret != 0)) {
-		pr_err("%s open session failed, err: %x\n", __func__, sess_arg.ret);
-		err = -EINVAL;
-		goto out_ctx;
-	}
-	dd->session_id = sess_arg.session;
-
-	/*
-	 * Allocate handshake buffer from OP-TEE share memory
-	 */
-	dd->shm_pool = tee_shm_alloc_kernel_buf(dd->octx, CRYPTO_SHM_SIZE);
-	if (IS_ERR(dd->shm_pool)) {
-		pr_err("%s tee_shm_alloc failed\n", __func__);
-		goto out_sess;
-	}
-
-	dd->va_shm = tee_shm_get_va(dd->shm_pool, 0);
-	if (IS_ERR(dd->va_shm)) {
-		tee_shm_free(dd->shm_pool);
-		pr_err("%s tee_shm_get_va failed\n", __func__);
-		goto out_sess;
-	}
-	return 0;
-
-out_sess:
-	tee_client_close_session(dd->octx, dd->session_id);
-out_ctx:
-	tee_client_close_context(dd->octx);
-	return err;
-}
-
-static void optee_ecc_close(struct nu_ecc_dev *dd)
-{
-	tee_shm_free(dd->shm_pool);
-	tee_client_close_session(dd->octx, dd->session_id);
-	tee_client_close_context(dd->octx);
-	dd->octx = NULL;
 }
 
 static long ma35_ecc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
@@ -1367,13 +1296,13 @@ static long ma35_ecc_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 				       ((args.knum_y & 0x9F) << 8), ECC_KSXY);
 		} else {
 			ma35_write_reg(dd, 0, ECC_KSXY);
-			strncpy((char *)&dd->va_shm[0x1240 / 4], args.Qx, 0x240);
-			strncpy((char *)&dd->va_shm[0x1480 / 4], args.Qy, 0x240);
+			strscpy((char *)&dd->va_shm[0x1240 / 4], args.Qx, 0x240);
+			strscpy((char *)&dd->va_shm[0x1480 / 4], args.Qy, 0x240);
 		}
 
-		strncpy((char *)&dd->va_shm[0x1000 / 4], args.sha_dgst, 0x240);
-		strncpy((char *)&dd->va_shm[0x16C0 / 4], args.R, 0x240);
-		strncpy((char *)&dd->va_shm[0x1900 / 4], args.S, 0x240);
+		strscpy((char *)&dd->va_shm[0x1000 / 4], args.sha_dgst, 0x240);
+		strscpy((char *)&dd->va_shm[0x16C0 / 4], args.R, 0x240);
+		strscpy((char *)&dd->va_shm[0x1900 / 4], args.S, 0x240);
 
 		/*
 		 *  Invoke OP-TEE Crypto PTA to run ECC
@@ -1421,9 +1350,9 @@ static long ma35_ecc_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 				       ecc_ctx->keylen);
 		}
 
-		strncpy((char *)&dd->va_shm[0x1000 / 4], args.sha_dgst, 0x240);
-		strncpy((char *)&dd->va_shm[0x1240 / 4], args.d, 0x240);
-		strncpy((char *)&dd->va_shm[0x1480 / 4], args.k, 0x240);
+		strscpy((char *)&dd->va_shm[0x1000 / 4], args.sha_dgst, 0x240);
+		strscpy((char *)&dd->va_shm[0x1240 / 4], args.d, 0x240);
+		strscpy((char *)&dd->va_shm[0x1480 / 4], args.k, 0x240);
 
 		/*
 		 *  Invoke OP-TEE Crypto PTA to run ECC
@@ -1478,10 +1407,9 @@ static int ma35_ecc_open(struct inode *inode, struct file *file)
 	ecc_ctx->dd = __ecc_dd;
 	file->private_data = ecc_ctx;
 
-	if (__ecc_dd->octx == NULL) {
-		if (optee_ecc_open(__ecc_dd) != 0)
-			return -ENODEV;
-	}
+	if (__ecc_dd->octx == NULL)
+		return -ENODEV;
+
 	return 0;
 }
 
@@ -1509,6 +1437,71 @@ static struct miscdevice ma35_ecc_dev = {
 	.fops		= &ma35_ecc_fops,
 };
 
+static int ma35_optee_ecc_init(struct nu_ecc_dev *dd)
+{
+	struct tee_ioctl_open_session_arg sess_arg;
+	int err;
+
+	err = ma35_crypto_optee_init(dd->nu_cdev);
+	if (err)
+		return err;
+	/*
+	 * Open ECC context with TEE driver
+	 */
+	dd->octx = tee_client_open_context(NULL, optee_ctx_match, NULL, NULL);
+	if (IS_ERR(dd->octx)) {
+		pr_err("%s open context failed, err: %x\n", __func__, sess_arg.ret);
+		return err;
+	}
+
+	/*
+	 * Open ECC session with Crypto Trusted App
+	 */
+	memset(&sess_arg, 0, sizeof(sess_arg));
+	memcpy(sess_arg.uuid, dd->nu_cdev->tee_cdev->id.uuid.b, TEE_IOCTL_UUID_LEN);
+	sess_arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
+	sess_arg.num_params = 0;
+
+	err = tee_client_open_session(dd->octx, &sess_arg, NULL);
+	if ((err < 0) || (sess_arg.ret != 0)) {
+		pr_err("%s open session failed, err: %x\n", __func__, sess_arg.ret);
+		err = -EINVAL;
+		goto out_ctx;
+	}
+	dd->session_id = sess_arg.session;
+
+	/*
+	 * Allocate handshake buffer from OP-TEE share memory
+	 */
+	dd->shm_pool = tee_shm_alloc_kernel_buf(dd->octx, CRYPTO_SHM_SIZE);
+	if (IS_ERR(dd->shm_pool)) {
+		pr_err("%s tee_shm_alloc failed\n", __func__);
+		goto out_sess;
+	}
+
+	dd->va_shm = tee_shm_get_va(dd->shm_pool, 0);
+	if (IS_ERR(dd->va_shm)) {
+		tee_shm_free(dd->shm_pool);
+		pr_err("%s tee_shm_get_va failed\n", __func__);
+		goto out_sess;
+	}
+	return 0;
+
+out_sess:
+	tee_client_close_session(dd->octx, dd->session_id);
+out_ctx:
+	tee_client_close_context(dd->octx);
+	return err;
+}
+
+static void ma35_optee_ecc_exit(struct nu_ecc_dev *dd)
+{
+	tee_shm_free(dd->shm_pool);
+	tee_client_close_session(dd->octx, dd->session_id);
+	tee_client_close_context(dd->octx);
+	dd->octx = NULL;
+}
+
 int ma35_ecc_optee_probe(struct device *dev, struct nu_crypto_dev *crypto_dev)
 {
 	struct nu_ecc_dev *ecc_dd = &crypto_dev->ecc_dd;
@@ -1519,6 +1512,10 @@ int ma35_ecc_optee_probe(struct device *dev, struct nu_crypto_dev *crypto_dev)
 	ecc_dd->nu_cdev = crypto_dev;
 	ecc_dd->reg_base = crypto_dev->reg_base;
 	ecc_dd->octx = NULL;
+
+	err = ma35_optee_ecc_init(ecc_dd);
+	if (err)
+		return err;
 
 	INIT_LIST_HEAD(&ecc_dd->list);
 	spin_lock_init(&ecc_dd->lock);
@@ -1584,7 +1581,7 @@ int ma35_ecc_optee_remove(struct device *dev, struct nu_crypto_dev *crypto_dev)
 	list_del(&ecc_dd->list);
 	spin_unlock(&nu_ecc.lock);
 
-	optee_ecc_close(ecc_dd);
+	ma35_optee_ecc_exit(ecc_dd);
 
 	return 0;
 }

@@ -526,39 +526,6 @@ static int ma35_aes_optee_init(struct nu_aes_dev *dd)
 	return 0;
 }
 
-static int ma35_aes_open(struct nu_aes_dev *dd)
-{
-	struct tee_ioctl_open_session_arg sess_arg;
-	int err;
-
-	err = ma35_aes_optee_init(dd);
-	if (err)
-		return err;
-
-	/*
-	 * Open AES session with Crypto Trusted App
-	 */
-	memset(&sess_arg, 0, sizeof(sess_arg));
-	memcpy(sess_arg.uuid, dd->nu_cdev->tee_cdev->id.uuid.b, TEE_IOCTL_UUID_LEN);
-	sess_arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
-	sess_arg.num_params = 0;
-
-	err = tee_client_open_session(dd->octx, &sess_arg, NULL);
-	if ((err < 0) || (sess_arg.ret != 0)) {
-		pr_err("%s open session failed, err: %x\n", __func__, sess_arg.ret);
-		return -EINVAL;
-	}
-
-	dd->session_id = sess_arg.session;
-
-	return 0;
-}
-
-static void optee_aes_close(struct nu_aes_dev *dd)
-{
-	tee_client_close_session(dd->octx, dd->session_id);
-}
-
 static int ma35_aes_ecb_encrypt(struct skcipher_request *req)
 {
 	return ma35_aes_crypt(req, AES_MODE_ECB | AES_CTL_ENCRPT);
@@ -653,17 +620,11 @@ static int ma35_aes_cra_init(struct crypto_tfm *tfm)
 	if (!aes_dd)
 		return -ENODEV;
 
-	return ma35_aes_open(aes_dd);
+	return 0;
 }
 
 static void ma35_aes_cra_exit(struct crypto_tfm *tfm)
 {
-	struct nu_aes_ctx *ctx = crypto_tfm_ctx(tfm);
-	struct nu_aes_dev *aes_dd;
-
-	aes_dd = ma35_aes_find_dev(&ctx->base);
-	if (aes_dd)
-		optee_aes_close(aes_dd);
 }
 
 static struct skcipher_alg ma35_aes_algs[] = {
@@ -1011,10 +972,6 @@ static int ma35_aes_gcm_init(struct crypto_aead *aead)
 	if (!aes_dd)
 		return -ENODEV;
 
-	err = ma35_aes_open(aes_dd);
-	if (err != 0)
-		return err;
-
 	/*
 	 * Open a crypto session
 	 */
@@ -1034,7 +991,6 @@ static int ma35_aes_gcm_init(struct crypto_aead *aead)
 	err = tee_client_invoke_func(aes_dd->octx, &inv_arg, param);
 	if ((err < 0) || (inv_arg.ret != 0)) {
 		pr_err("PTA_CMD_CRYPTO_OPEN_SESSION err: %x\n", inv_arg.ret);
-		optee_aes_close(aes_dd);
 		return -EINVAL;
 	}
 	aes_dd->crypto_session_id = param[1].u.value.a;
@@ -1070,8 +1026,6 @@ static void ma35_aes_gcm_exit(struct crypto_aead *aead)
 	param[1].u.value.a = aes_dd->crypto_session_id;
 
 	tee_client_invoke_func(aes_dd->octx, &inv_arg, param);
-
-	optee_aes_close(aes_dd);
 }
 
 static struct aead_alg ma35_aes_gcm_alg[] = {
@@ -1315,10 +1269,6 @@ static int ma35_aes_ccm_init(struct crypto_aead *aead)
 	if (!aes_dd)
 		return -ENODEV;
 
-	err = ma35_aes_open(aes_dd);
-	if (err != 0)
-		return err;
-
 	/*
 	 * Open a crypto session
 	 */
@@ -1338,7 +1288,6 @@ static int ma35_aes_ccm_init(struct crypto_aead *aead)
 	err = tee_client_invoke_func(aes_dd->octx, &inv_arg, param);
 	if ((err < 0) || (inv_arg.ret != 0)) {
 		pr_err("PTA_CMD_CRYPTO_OPEN_SESSION err: %x\n", inv_arg.ret);
-		optee_aes_close(aes_dd);
 		return -EINVAL;
 	}
 	aes_dd->crypto_session_id = param[1].u.value.a;
@@ -1374,8 +1323,6 @@ static void ma35_aes_ccm_exit(struct crypto_aead *aead)
 	param[1].u.value.a = aes_dd->crypto_session_id;
 
 	tee_client_invoke_func(aes_dd->octx, &inv_arg, param);
-
-	optee_aes_close(aes_dd);
 }
 
 static struct aead_alg ma35_aes_ccm_alg[] = {
@@ -1450,12 +1397,33 @@ static int ma35_register_gcm_ccm(struct device *dev)
 int ma35_aes_optee_probe(struct device *dev, struct nu_crypto_dev *crypto_dev)
 {
 	struct nu_aes_dev *aes_dd = &crypto_dev->aes_dd;
+	struct tee_ioctl_open_session_arg sess_arg;
 	int i, err;
 
 	aes_dd->dev = dev;
 	aes_dd->nu_cdev = crypto_dev;
 	aes_dd->reg_base = crypto_dev->reg_base;
 	aes_dd->octx = NULL;
+
+	err = ma35_aes_optee_init(aes_dd);
+	if (err)
+		return err;
+
+	/*
+	 * Open AES session with Crypto Trusted App
+	 */
+	memset(&sess_arg, 0, sizeof(sess_arg));
+	memcpy(sess_arg.uuid, aes_dd->nu_cdev->tee_cdev->id.uuid.b, TEE_IOCTL_UUID_LEN);
+	sess_arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
+	sess_arg.num_params = 0;
+
+	err = tee_client_open_session(aes_dd->octx, &sess_arg, NULL);
+	if ((err < 0) || (sess_arg.ret != 0)) {
+		pr_err("%s open session failed, err: %x\n", __func__, sess_arg.ret);
+		return -EINVAL;
+	}
+
+	aes_dd->session_id = sess_arg.session;
 
 	INIT_LIST_HEAD(&aes_dd->list);
 	spin_lock_init(&aes_dd->lock);
@@ -1518,6 +1486,7 @@ int ma35_aes_optee_remove(struct device *dev, struct nu_crypto_dev *crypto_dev)
 	tasklet_kill(&aes_dd->done_task);
 	tasklet_kill(&aes_dd->queue_task);
 
+	tee_client_close_session(aes_dd->octx, aes_dd->session_id);
 	tee_shm_free(aes_dd->shm_pool);
 	tee_client_close_context(aes_dd->octx);
 	aes_dd->octx = NULL;
