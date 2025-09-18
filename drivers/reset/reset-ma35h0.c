@@ -35,9 +35,7 @@ static int ma35h0_restart_handler(struct notifier_block *this,
 	ma35h0_reg_unlock();
 	regmap_write(data->regmap, REG_SYS_IPRST0, 1 << MA35H0_RESET_CHIP);
 	ma35h0_reg_lock();
-
-	while (1)
-		cpu_do_idle();
+	mdelay(1000);
 
 	return NOTIFY_DONE;
 }
