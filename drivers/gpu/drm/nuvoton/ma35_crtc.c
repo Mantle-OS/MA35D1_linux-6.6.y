@@ -41,6 +41,15 @@
 #define ma35_crtc(c) \
 	container_of(c, struct ma35_crtc, drm_crtc)
 
+static const struct drm_prop_enum_list ma35_dpi_format[] = {
+	{ MA35_DPI_D16CFG1, "D16CFG1" },
+	{ MA35_DPI_D16CFG2, "D16CFG2" },
+	{ MA35_DPI_D16CFG3, "D16CFG3" },
+	{ MA35_DPI_D18CFG1, "D18CFG1" },
+	{ MA35_DPI_D18CFG2, "D18CFG2" },
+	{ MA35_DPI_D24, "D24" },
+};
+
 static enum drm_mode_status
 ma35_crtc_mode_valid(struct drm_crtc *drm_crtc,
 			const struct drm_display_mode *mode)
@@ -158,6 +167,10 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		regmap_update_bits(priv->regmap, MA35_FRAMEBUFFER_CONFIG,
 						   MA35_PRIMARY_GAMMA, 0);
 	}
+
+	/* DPI format */
+	reg = FIELD_PREP(MA35_DPI_FORMAT_MASK, crtc->dpi_format);
+	regmap_write(priv->regmap, MA35_DPI_CONFIG, reg);
 
 	/* Dither */
 	if (crtc->dither_enable) {
@@ -307,7 +320,9 @@ static int ma35_crtc_atomic_set_property(struct drm_crtc *drm_crtc,
 {
 	struct ma35_crtc *crtc = ma35_crtc(drm_crtc);
 
-	if (property == crtc->dither_enable_prop) {
+	if (property == crtc->dpi_format_prop) {
+		crtc->dpi_format = value;
+	} else if (property == crtc->dither_enable_prop) {
 		crtc->dither_enable = value;
 	} else if (property == crtc->dither_depth_prop) {
 		crtc->dither_depth = value;
@@ -325,7 +340,9 @@ static int ma35_crtc_atomic_get_property(struct drm_crtc *drm_crtc,
 {
 	struct ma35_crtc *crtc = ma35_crtc(drm_crtc);
 
-	if (property == crtc->dither_enable_prop) {
+	if (property == crtc->dpi_format_prop) {
+		*value = crtc->dpi_format;
+	} else if (property == crtc->dither_enable_prop) {
 		*value = crtc->dither_enable;
 	} else if (property == crtc->dither_depth_prop) {
 		*value = crtc->dither_depth;
@@ -368,6 +385,15 @@ static int ma35_crtc_create_properties(struct ma35_drm *priv)
 	struct drm_device *drm_dev = &priv->drm_dev;
 	struct ma35_crtc *crtc = priv->crtc;
 	struct drm_crtc *drm_crtc = &crtc->drm_crtc;
+
+	crtc->dpi_format_prop = drm_property_create_enum(drm_dev, 0, "dpi-format",
+							ma35_dpi_format, ARRAY_SIZE(ma35_dpi_format));
+	if (!crtc->dpi_format_prop) {
+		drm_err(drm_dev, "Failed to create dpi format property\n");
+		return -ENOMEM;
+	}
+	drm_object_attach_property(&drm_crtc->base, crtc->dpi_format_prop, MA35_DPI_D24);
+	crtc->dpi_format = MA35_DPI_D24;
 
 	crtc->dither_enable_prop = drm_property_create_bool(drm_dev, 0, "dither-enable");
 	if (!crtc->dither_enable_prop) {

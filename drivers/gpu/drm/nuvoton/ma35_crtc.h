@@ -15,12 +15,25 @@
 struct drm_pending_vblank_event;
 struct ma35_drm;
 
+enum ma35_dpi_format_enum {
+	MA35_DPI_D16CFG1,
+	MA35_DPI_D16CFG2,
+	MA35_DPI_D16CFG3,
+	MA35_DPI_D18CFG1,
+	MA35_DPI_D18CFG2,
+	MA35_DPI_D24,
+};
+
+#define MA35_DPI_FORMAT_MASK GENMASK(2, 0)
+
 struct ma35_crtc {
 	struct drm_crtc drm_crtc;
+	struct drm_property *dpi_format_prop;
 	struct drm_property *dither_depth_prop;
 	struct drm_property *dither_enable_prop;
 	spinlock_t vblank_lock;
 	u32 vblank_counter;
+	u32 dpi_format;
 	u16 dither_depth;
 	bool dither_enable;
 };

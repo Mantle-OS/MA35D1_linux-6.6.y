@@ -413,8 +413,7 @@ static void ma35_drm_shutdown(struct platform_device *pdev)
 
 static __maybe_unused int ma35_drm_runtime_suspend(struct device *dev)
 {
-	struct drm_device *drm_dev = dev_get_drvdata(dev);
-	struct ma35_drm *priv = ma35_drm(drm_dev);
+	struct ma35_drm *priv = dev_get_drvdata(dev);
 
 	clk_disable_unprepare(priv->dcupclk);
 
@@ -423,8 +422,8 @@ static __maybe_unused int ma35_drm_runtime_suspend(struct device *dev)
 
 static __maybe_unused int ma35_drm_suspend(struct device *dev)
 {
-	struct drm_device *drm_dev = dev_get_drvdata(dev);
-	struct ma35_drm *priv = ma35_drm(drm_dev);
+	struct ma35_drm *priv = dev_get_drvdata(dev);
+	struct drm_device *drm_dev = &priv->drm_dev;
 	struct drm_atomic_state *state;
 
 	WARN_ON(priv->pm_atomic_state);
@@ -441,8 +440,7 @@ static __maybe_unused int ma35_drm_suspend(struct device *dev)
 
 static __maybe_unused int ma35_drm_runtime_resume(struct device *dev)
 {
-	struct drm_device *drm_dev = dev_get_drvdata(dev);
-	struct ma35_drm *priv = ma35_drm(drm_dev);
+	struct ma35_drm *priv = dev_get_drvdata(dev);
 	int ret;
 
 	ret = clk_prepare_enable(priv->dcupclk);
@@ -456,8 +454,8 @@ static __maybe_unused int ma35_drm_runtime_resume(struct device *dev)
 
 static __maybe_unused int ma35_drm_resume(struct device *dev)
 {
-	struct drm_device *drm_dev = dev_get_drvdata(dev);
-	struct ma35_drm *priv = ma35_drm(drm_dev);
+	struct ma35_drm *priv = dev_get_drvdata(dev);
+	struct drm_device *drm_dev = &priv->drm_dev;
 	int ret;
 
 	if (WARN_ON(!priv->pm_atomic_state))
