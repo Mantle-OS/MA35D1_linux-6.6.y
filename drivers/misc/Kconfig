@@ -563,7 +563,7 @@ config TPS6594_PFSM
 	  will be called tps6594-pfsm.
 
 config MA35_KEYSTORE
-	tristate "Nuvoton MA35 Serious SoC Key Store support"
+	tristate "Nuvoton MA35 Series SoC Key Store support"
 	depends on ARCH_MA35D1 || ARCH_MA35D0 || ARCH_MA35H0
 	default y
 	help
