@@ -44,14 +44,23 @@ enum ma35d1_pll_mode {
 #define VSIPLL_FREFDIVM_MIN_FREQ0	1000000UL
 #define VSIPLL_FREFDIVM_MIN_FREQ1	10000000UL
 
-#define VSIPLL_FCLK_MAX_FREQ		2400000000UL
-#define VSIPLL_FCLK_MIN_FREQ		600000000UL
+#define VSIPLL_FCLK_MAX_FREQ	2400000000UL
+#define VSIPLL_FCLK_MIN_FREQ	600000000UL
 
-#define VSIPLL_FCLKO_MAX_FREQ		2400000000UL
-#define VSIPLL_FCLKO_MIN_FREQ		85700000UL
+#define VSIPLL_FCLKO_MAX_FREQ	2400000000UL
+#define VSIPLL_FCLKO_MIN_FREQ	85700000UL
 
-#define VSIPLL_SPREAD_RANGE		194
-#define VSIPLL_MODULATION_FREQ		50000
+#define INDIV_MIN		1
+#define INDIV_MAX		63
+#define FBDIV_MIN		16
+#define FBDIV_MAX		2047
+#define FBDIV_FRAC_MIN		1600
+#define FBDIV_FRAC_MAX		204700
+#define OUTDIV_MIN		1
+#define OUTDIV_MAX		7
+
+#define VSIPLL_SPREAD_RANGE	194
+#define VSIPLL_MODULATION_FREQ	50000
 
 /* Clock Control Registers Offset */
 #define REG_CLK_PWRCTL          (0x00)
@@ -135,6 +144,7 @@ enum ma35d1_pll_mode {
 
 #define VSIPLLCTL2_SLOPE_POS	(0)
 #define VSIPLLCTL2_SLOPE_MSK	(0xfffffful << VSIPLLCTL2_SLOPE_POS)
+
 
 struct clk_hw *ma35d1_reg_clk_pll(enum ma35d1_pll_type type, u8 u8mode,
 				 const char *name, const char *parent,
