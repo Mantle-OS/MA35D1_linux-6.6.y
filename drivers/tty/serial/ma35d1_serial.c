@@ -1012,9 +1012,6 @@ ma35d1serial_set_termios(struct uart_port *port, struct ktermios *termios,
 	unsigned long flags;
 	unsigned int baud, quot;
 
-	if(up->port.line==12 || up->port.line==14)
-		serial_out(up, UART_REG_MCR, serial_in(up, UART_REG_MCR)|(1<<4));
-
 	switch (termios->c_cflag & CSIZE) {
 	case CS5:
 		lcr = 0;
