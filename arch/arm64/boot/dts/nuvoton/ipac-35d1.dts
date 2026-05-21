@@ -1,0 +1,584 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Device Tree Include file for the SoM-35D1F
+ *
+ * Copyright (C) 2024 EMAC Inc.
+ *
+ */
+
+/dts-v1/;
+
+#include "ma35d1.dtsi"
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/net/mscc-phy-vsc8531.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	model = "EMAC iPac-35d1";
+	compatible = "emac,iPac35d1", "nuvoton,ma35d1";
+	chosen {
+		bootargs = "root=/dev/mmcblk0p1 rootfstype=ext4 rw rootwait console=ttyS0,115200n8 rdinit=/sbin/init mem=512M";
+	};
+	memory {
+                device_type = "memory";
+		reg = <0x00000000 0x80000000 0 0x20000000>; /* DRAM space - 1, size : 512MB DRAM */
+        };
+	clock_ksz8081_in: clock-ksz8081-in {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <25000000>;
+	};
+	pcfg_sdhci_drive2_3_3V_bias_pull_up: pcfg_sdhci_drive2_3_3V_bias_pull_up {
+		slew-rate = <0>; /* 0:normal, 1:high */
+		input-schmitt-enable;  /* input-schmitt-disable, input-schmitt-enable */
+		bias-pull-up; /* bias-disable, bias-pull-up, bias-pull-down  */
+		power-source = <3300>; /* 1800:1.8v , 3300:3.3v */
+		drive-strength = <2>; /* 0 ~ 7 */
+	};
+	i2c0: i2c@40800000 {
+                compatible = "nuvoton,ma35h1-i2c";
+                reg = <0x0 0x40800000 0x0 0x10000>;
+                interrupts = <GIC_SPI 13 IRQ_TYPE_LEVEL_HIGH>;
+                clocks = <&clk I2C0_GATE>;
+                clock-frequency = <100000>;
+                resets = <&reset MA35D1_RESET_I2C0>;
+                #address-cells = <1>;
+                #size-cells = <0>;
+                status = "disable";
+        };
+};
+
+&rtc {
+	status = "okay";
+};
+
+&ehci0 {
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_hsusb0>;
+        status = "okay";
+};
+
+&ehci1 {
+	status = "okay";
+        oc-active-level = <1>;
+};
+
+&uart0{
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart0>;
+};
+&uart1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart1>;
+	uart-has-rtscts;
+};
+
+&uart3 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart3>;
+	uart-has-rtscts;
+};
+&uart4 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart4>;
+	uart-has-rtscts;
+};
+
+&can0 {
+        status = "okay";
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_can0>;
+};
+
+&i2s0{
+	status = "okay";
+	pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_i2s0>;
+};
+
+&i2c0{
+	pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_i2c0>;
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1>;
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	gpio_expander_1@3e{
+                #gpio-cells = <2>;
+                #interrupt-cells = <2>;
+                compatible = "semtech,sx1509q";
+                reg = <0x3e>;
+                interrupt-parent = <&gpioh>;
+                interrupts = <2 IRQ_TYPE_EDGE_FALLING>;
+                gpio-controller;
+                interrupt-controller;
+		pinctrl-names = "default";
+                pinctrl-0 = <&pinctrl_gpio_expander_1_int>,<&gpio_expander_1_pins>;
+		reset-gpios =  <&gpioh 4 GPIO_ACTIVE_LOW>;
+		semtech,probe-reset;
+		gpio-line-names = "EXT0_GPIO/PWM0", "EXT0_GPIO/PWM1", "EXT0_GPIO/PWM2", "EXT0_GPIO/PWM3",
+                                  "EXT0_GPIO/PWM4", "EXT0_GPIO/PWM5", "EXT0_GPIO/PWM6", "EXT0_GPIO/PWM7",
+                                  "EXT0_GPIO/PWM8", "EXT0_GPIO/PWM9", "EXT0_GPIO/PWM10", "EXT0_GPIO/PWM11",
+                                  "EXT0_GPIO/PWM12", "EXT0_GPIO/PWM13", "EXT0_GPIO/PWM14", "EXT0_GPIO/PWM15";
+                gpio_expander_1_pins: gpio1-cfg {
+                        pins =  "gpio0","gpio1",
+				"gpio2","gpio3",
+				"gpio4","gpio5",
+				"gpio6","gpio7",
+				"gpio8","gpio9",
+				"gpio10","gpio11",
+				"gpio12","gpio13",
+				"gpio14","gpio15";
+			drive-push-pull;
+                };
+        };
+	gpio_expander_2@3f{
+                #gpio-cells = <2>;
+                #interrupt-cells = <2>;
+                compatible = "semtech,sx1509q";
+                reg = <0x3f>;
+                interrupt-parent = <&gpioh>;
+                interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+                gpio-controller;
+                interrupt-controller;
+                pinctrl-names = "default";
+                pinctrl-0 = <&pinctrl_gpio_expander_2_int>,<&gpio_expander_2_pins>;
+		reset-gpios =  <&gpioh 4 GPIO_ACTIVE_LOW>;
+		semtech,probe-reset;
+		gpio-line-names = "EXT1_GPIO/PWM0", "EXT1_GPIO/PWM1", "EXT1_GPIO/PWM2", "EXT1_GPIO/PWM3",
+                                  "EXT1_GPIO/PWM4", "EXT1_GPIO/PWM5", "EXT1_GPIO/PWM6", "EXT1_GPIO/PWM7",
+                                  "EXT1_GPIO/PWM8", "EXT1_GPIO/PWM9", "EXT1_GPIO/PWM10", "EXT1_GPIO/PWM11",
+                                  "EXT1_GPIO/PWM12", "EXT1_GPIO/PWM13", "EXT1_GPIO/PWM14", "EXT1_GPIO/PWM15";
+                gpio_expander_2_pins: gpio2-cfg {
+			pins =  "gpio0","gpio1",
+                                "gpio2","gpio3",
+                                "gpio4","gpio5",
+                                "gpio6","gpio7",
+                                "gpio8","gpio9",
+                                "gpio10","gpio11",
+                                "gpio12","gpio13",
+                                "gpio14","gpio15";
+			drive-push-pull;
+                };
+        };
+
+};
+
+&gpiod{
+	gpio-line-names = "", "", "", "",
+			  "", "", "", "",
+			  "", "", "", "LOW_POWER_EN",
+			  "", "", "", "";
+};
+
+&gpioh{
+	gpio-line-names = "", "", "", "",
+                          "", "COMA_ONLINE", "COMB_PWRDN", "COMC_ONLINE",
+                          "", "", "", "",
+                          "", "", "", "";
+};
+
+&gpioi{
+	gpio-line-names = "", "", "", "",
+                          "", "", "", "",
+                          "", "", "4xx_Rx_EN", "CAN_STB",
+                          "RS485_TRM_EN", "", "", "";
+};
+
+&i2c2{
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c2>;
+	status = "okay";
+	#address-cells = <1>;
+        #size-cells = <0>;
+};
+
+&i2c5{
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_i2c5>;
+        status = "okay";
+        #address-cells = <1>;
+        #size-cells = <0>;
+};
+
+&qspi0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_qspi0>;
+	num_cs = <1>;
+	/delete-node/ spi@1;
+	flash@0 {
+                /* W25Q128 */
+                compatible = "jedec,spi-nor";
+                spi-max-frequency = <50000000>;
+                reg = <0>;
+        };
+};
+
+&sdhci1 {
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_sdhci1>;
+        status = "okay";
+	bus-width = <4>;
+	wp-gpios = <&gpioj 4 GPIO_ACTIVE_HIGH>;
+	no-1-8-v;
+	/* 
+	   Based on datasheet, the 4-bits data line supports up to 25MBps.
+	   Cap the SD speed to 25MBps.
+	*/
+	sd-uhs-sdr25;
+	sd-uhs-sdr12;
+	cap-sd-highspeed;
+};
+
+// eMMC
+&sdhci0 {
+        status = "okay";
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_emmc0>;
+        bus-width = <4>;
+        non-removable;
+	broken-cd;
+        no-1-8-v;
+	/delete-property/ cd-gpios;
+	/delete-property/ wp-gpios;
+	disable-wp;
+};
+
+
+&gmac0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gmac0>;
+	phy-mode = "rgmii-id";
+	mdio {
+		eth_phy0: ethernet-phy@0 {
+                        compatible = "ethernet-phy-ieee802.3-c22";
+                        interrupts-extended = <&gpioh 1 IRQ_TYPE_LEVEL_LOW>;
+                        reg = <1>;
+                };
+	};
+};
+
+&gmac1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gmac1>;
+	phy-mode = "rmii";
+	mdio {
+		eth_phy1: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <4>;
+			micrel,led-mode = <1>;
+			clocks = <&clock_ksz8081_in>;
+			clock-names = "rmii-ref";
+			interrupts-extended = <&gpioh 1 IRQ_TYPE_LEVEL_LOW>;
+		};
+	};
+};
+
+&spi2{
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_spi2>;
+	spi-max-frequency = <5000000>;
+};
+
+&adc0 {
+	compatible = "nuvoton,ma35-adc";
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_adc0>;
+};
+
+&timer0 {
+	status = "okay";
+	pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_timer0>;	
+};
+
+&pinctrl {
+	pinctrl-names = "default";
+        pinctrl-0 = <&pintctrl_gpios>;
+	/* 
+		FOr those pins used for general GPIO, shared INT, shared reset
+		Pin-mux them pin in here.
+		For those pin are used by particular hardware interface, pinmux them sololly.
+	*/
+	gpios{
+		pintctrl_gpios: gpiosgrp{
+                        nuvoton,pins =
+				/* Boot options and Interrupts */
+                                <SYS_GPG_MFPL_PG7MFP_GPIO			&pcfg_default>,
+                                <SYS_GPG_MFPL_PG6MFP_GPIO			&pcfg_default>,
+				<SYS_GPG_MFPL_PG5MFP_GPIO                       &pcfg_default>,
+                                <SYS_GPG_MFPL_PG4MFP_GPIO                       &pcfg_default>,
+				<SYS_GPG_MFPL_PG3MFP_GPIO                       &pcfg_default>,
+                                <SYS_GPG_MFPL_PG2MFP_GPIO                       &pcfg_default>,
+				<SYS_GPG_MFPL_PG1MFP_GPIO                       &pcfg_default>,
+                                <SYS_GPG_MFPL_PG0MFP_GPIO                       &pcfg_default>,
+				/* GPIOs pin on U1C */
+				<SYS_GPC_MFPL_PC6MFP_GPIO                       &pcfg_default>,
+				<SYS_GPC_MFPL_PC7MFP_GPIO                       &pcfg_default>,
+				<SYS_GPD_MFPH_PD10MFP_GPIO                      &pcfg_default>,
+				<SYS_GPD_MFPH_PD11MFP_GPIO                      &pcfg_default>,
+				<SYS_GPH_MFPL_PH0MFP_GPIO                       &pcfg_default>,
+				<SYS_GPH_MFPL_PH1MFP_GPIO                       &pcfg_default>,
+				<SYS_GPH_MFPL_PH4MFP_GPIO                       &pcfg_default>,
+				<SYS_GPH_MFPL_PH5MFP_GPIO                       &pcfg_default>,
+				<SYS_GPH_MFPL_PH6MFP_GPIO                       &pcfg_default>,
+				<SYS_GPH_MFPL_PH7MFP_GPIO                       &pcfg_default>,
+				<SYS_GPI_MFPH_PI10MFP_GPIO                      &pcfg_default>,
+				<SYS_GPI_MFPH_PI11MFP_GPIO                      &pcfg_default>,
+				<SYS_GPI_MFPH_PI12MFP_GPIO                      &pcfg_default>,
+				/* High Driver GPIO */
+				<SYS_GPC_MFPH_PC12MFP_GPIO			&pcfg_default>,
+				<SYS_GPC_MFPH_PC13MFP_GPIO			&pcfg_default>,
+				<SYS_GPC_MFPH_PC14MFP_GPIO			&pcfg_default>,
+				<SYS_GPC_MFPH_PC15MFP_GPIO			&pcfg_default>,
+				<SYS_GPH_MFPH_PH12MFP_GPIO			&pcfg_default>,
+				<SYS_GPH_MFPH_PH13MFP_GPIO			&pcfg_default>,
+				<SYS_GPH_MFPH_PH14MFP_GPIO			&pcfg_default>,
+				<SYS_GPH_MFPH_PH15MFP_GPIO			&pcfg_default>,
+				<SYS_GPA_MFPH_PA10MFP_GPIO			&pcfg_default>,
+				<SYS_GPA_MFPH_PA11MFP_GPIO			&pcfg_default>,
+				<SYS_GPA_MFPH_PA12MFP_GPIO			&pcfg_default>,
+				<SYS_GPA_MFPH_PA13MFP_GPIO			&pcfg_default>,
+				/* PMIC_nIRQ */
+				<SYS_GPA_MFPH_PA15MFP_GPIO                      &pcfg_default>;
+                };
+
+	};
+	gpio_expander_1{
+		pinctrl_gpio_expander_1_int: gpioexpander1grp{
+			nuvoton,pins =
+				<SYS_GPH_MFPL_PH2MFP_GPIO                       &pcfg_default>;
+		};
+	};
+	gpio_expander_2{ 
+                pinctrl_gpio_expander_2_int: gpioexpander2grp{ 
+                        nuvoton,pins =
+				<SYS_GPH_MFPL_PH3MFP_GPIO                       &pcfg_default>;
+                };
+        };
+        hsusb0 {
+                pinctrl_hsusb0: hsusb0grp{
+                        nuvoton,pins =
+				<SYS_GPL_MFPH_PL13MFP_HSUSBH_OVC		&pcfg_default>,
+                                <SYS_GPL_MFPH_PL12MFP_HSUSBH_PWREN              &pcfg_default>,
+                                <SYS_GPF_MFPH_PF15MFP_HSUSB0_VBUSVLD            &pcfg_default>;
+                };
+        };
+
+	uart0 {
+		pinctrl_uart0: uart0grp{
+			nuvoton,pins =
+				<SYS_GPE_MFPH_PE14MFP_UART0_TXD         &pcfg_default>,
+				<SYS_GPE_MFPH_PE15MFP_UART0_RXD         &pcfg_default>;
+		};
+	};
+	uart1 {
+		pinctrl_uart1: uart1grp{
+			nuvoton,pins =
+				<SYS_GPA_MFPL_PA3MFP_UART1_TXD      &pcfg_default>,
+				<SYS_GPA_MFPL_PA2MFP_UART1_RXD      &pcfg_default>,
+				<SYS_GPA_MFPL_PA1MFP_UART1_nRTS     &pcfg_default>,
+				<SYS_GPA_MFPL_PA0MFP_UART1_nCTS     &pcfg_default>,
+				<SYS_GPM_MFPL_PM2MFP_GPIO           &pcfg_default>,
+				<SYS_GPM_MFPL_PM3MFP_GPIO           &pcfg_default>,
+				<SYS_GPM_MFPL_PM4MFP_GPIO           &pcfg_default>,
+				<SYS_GPM_MFPL_PM5MFP_GPIO           &pcfg_default>;
+		};
+	};
+	uart3 {
+		pinctrl_uart3: uartgrp3{
+			nuvoton,pins =
+				<SYS_GPA_MFPL_PA7MFP_UART3_TXD      &pcfg_default>,
+				<SYS_GPA_MFPL_PA6MFP_UART3_RXD      &pcfg_default>,
+				<SYS_GPA_MFPL_PA5MFP_UART3_nRTS     &pcfg_default>,
+				<SYS_GPA_MFPL_PA4MFP_UART3_nCTS     &pcfg_default>;
+		};
+	};
+	uart4 {
+		pinctrl_uart4: uart4grp{
+			nuvoton,pins =
+				<SYS_GPA_MFPH_PA9MFP_UART4_TXD      &pcfg_default>,
+				<SYS_GPA_MFPH_PA8MFP_UART4_RXD      &pcfg_default>,
+				<SYS_GPI_MFPH_PI9MFP_UART4_nRTS     &pcfg_default>,
+				<SYS_GPI_MFPH_PI8MFP_UART4_nCTS     &pcfg_default>;
+		};
+	};
+
+	can0 {
+                pinctrl_can0: can0grp{
+                        nuvoton,pins =
+                                <SYS_GPN_MFPL_PN3MFP_CAN0_TXD   &pcfg_default>,
+                                <SYS_GPM_MFPL_PM6MFP_CAN0_RXD   &pcfg_default>;
+                };
+	};
+        
+	i2s0 {
+                pinctrl_i2s0: i2s0grp{
+                        nuvoton,pins =
+                                <SYS_GPG_MFPH_PG11MFP_I2S0_MCLK   &pcfg_default>,
+                                <SYS_GPG_MFPH_PG12MFP_I2S0_LRCK   &pcfg_default>,
+				<SYS_GPG_MFPH_PG13MFP_I2S0_BCLK   &pcfg_default>,
+                                <SYS_GPG_MFPH_PG14MFP_I2S0_DI	  &pcfg_default>,
+				<SYS_GPG_MFPH_PG15MFP_I2S0_DO     &pcfg_default>;
+                };
+        };
+
+	i2c0 {
+                pinctrl_i2c0: i2c0grp{
+                        nuvoton,pins =
+                                <SYS_GPD_MFPL_PD7MFP_I2C0_SCL   &pcfg_default>,
+                                <SYS_GPD_MFPL_PD6MFP_I2C0_SDA   &pcfg_default>;
+                };
+        };
+
+	i2c1 {
+		pinctrl_i2c1: i2c1grp{
+			nuvoton,pins =
+				<SYS_GPN_MFPL_PN4MFP_I2C1_SDA	&pcfg_default>,
+				<SYS_GPN_MFPL_PN5MFP_I2C1_SCL	&pcfg_default>;
+		};
+	};
+
+	i2c2 {
+		pinctrl_i2c2: i2c2grp{
+			nuvoton,pins =
+				<SYS_GPN_MFPL_PN1MFP_I2C2_SCL  &pcfg_default>,
+				<SYS_GPN_MFPL_PN0MFP_I2C2_SDA  &pcfg_default>;
+		};
+	};
+
+	i2c5 {
+                pinctrl_i2c5: i2c5grp{
+                        nuvoton,pins =
+                                <SYS_GPN_MFPH_PN13MFP_I2C5_SCL  &pcfg_default>,
+                                <SYS_GPN_MFPH_PN12MFP_I2C5_SDA  &pcfg_default>;
+                };
+        };
+
+	qspi0 {
+		pinctrl_qspi0: qspi0grp{
+			nuvoton,pins =
+				<SYS_GPD_MFPL_PD1MFP_QSPI0_CLK          &pcfg_default>,
+				<SYS_GPD_MFPL_PD0MFP_QSPI0_SS0		&pcfg_default>,
+				<SYS_GPD_MFPL_PD2MFP_QSPI0_MOSI0	&pcfg_default>,
+				<SYS_GPD_MFPL_PD3MFP_QSPI0_MISO0	&pcfg_default>,
+				<SYS_GPD_MFPL_PD4MFP_QSPI0_MOSI1	&pcfg_default>,
+				<SYS_GPD_MFPL_PD5MFP_QSPI0_MISO1	&pcfg_default>,
+				<SYS_GPD_MFPL_PD0MFP_QSPI0_SS0          &pcfg_default>;
+		};
+	};
+
+	sdhci1{
+		pinctrl_sdhci1: sdhci1grp{
+			nuvoton,pins =
+                                <SYS_GPJ_MFPL_PJ7MFP_SD1_CLK            &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPJ_MFPH_PJ8MFP_SD1_DAT0           &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPJ_MFPH_PJ9MFP_SD1_DAT1           &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPJ_MFPH_PJ10MFP_SD1_DAT2          &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPJ_MFPH_PJ11MFP_SD1_DAT3          &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPJ_MFPL_PJ6MFP_SD1_CMD            &pcfg_sdhci_drive2_3_3V>,
+				<SYS_GPJ_MFPL_PJ4MFP_SD1_WP             &pcfg_sdhci_drive2_3_3V>,
+				/*
+					The nCD pin to SoC is floating.
+					This nCD required external pull-up resistor.
+					Enabled internal pull up bias as work around until hardware design fix it.
+				*/
+				<SYS_GPJ_MFPL_PJ5MFP_SD1_nCD            &pcfg_sdhci_drive2_3_3V_bias_pull_up>;
+		};
+	};
+	
+	// mmc
+        emmc0 {
+                pinctrl_emmc0: emmc0grp{
+                        nuvoton,pins =
+                                <SYS_GPC_MFPL_PC0MFP_eMMC0_CMD          &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPC_MFPL_PC1MFP_eMMC0_CLK          &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPC_MFPL_PC2MFP_eMMC0_DAT0         &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPC_MFPL_PC3MFP_eMMC0_DAT1         &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPC_MFPL_PC4MFP_eMMC0_DAT2         &pcfg_sdhci_drive2_3_3V>,
+                                <SYS_GPC_MFPL_PC5MFP_eMMC0_DAT3         &pcfg_sdhci_drive2_3_3V>;
+                };
+        };
+
+	gmac0 {
+		pinctrl_gmac0: gmac0grp{
+			nuvoton,pins =
+				<SYS_GPE_MFPH_PE13MFP_RGMII0_TXD3	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPH_PE12MFP_RGMII0_TXD2	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE4MFP_RGMII0_TXD1	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE3MFP_RGMII0_TXD0	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE2MFP_RGMII0_TXCTL	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPH_PE11MFP_RGMII0_TXCLK	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPH_PE10MFP_RGMII0_RXD3	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPH_PE9MFP_RGMII0_RXD2	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPH_PE8MFP_RGMII0_RXD1	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE7MFP_RGMII0_RXD0	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE6MFP_RGMII0_RXCTL	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE5MFP_RGMII0_RXCLK	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE1MFP_RGMII0_MDIO	&pcfg_emac_3_3V>,
+				<SYS_GPE_MFPL_PE0MFP_RGMII0_MDC		&pcfg_emac_3_3V>;
+		};
+	};
+	gmac1 {
+                pinctrl_gmac1: gmac1grp{
+                        nuvoton,pins =
+                                <SYS_GPF_MFPL_PF6MFP_RMII1_CRSDV        &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPH_PF9MFP_RMII1_RXERR        &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPH_PF8MFP_RMII1_RXD1         &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPL_PF7MFP_RMII1_RXD0         &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPL_PF5MFP_RMII1_REFCLK       &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPL_PF4MFP_RMII1_TXD1         &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPL_PF3MFP_RMII1_TXD0         &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPL_PF2MFP_RMII1_TXEN         &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPL_PF1MFP_RMII1_MDIO         &pcfg_emac_3_3V>,
+                                <SYS_GPF_MFPL_PF0MFP_RMII1_MDC          &pcfg_emac_3_3V>;
+                };
+        };
+
+	spi2 {
+		pinctrl_spi2: spi2grp {
+			nuvoton,pins =
+				<SYS_GPG_MFPH_PG9MFP_SPI2_CLK		&pcfg_default>,
+				<SYS_GPK_MFPL_PK4MFP_SPI2_MISO		&pcfg_default>,
+				<SYS_GPG_MFPH_PG8MFP_SPI2_SS0		&pcfg_default>,
+				<SYS_GPM_MFPH_PM11MFP_SPI2_SS1		&pcfg_default>;
+		};
+        };
+
+	adc0 {
+		pinctrl_adc0: adc0grp {
+			nuvoton,pins =
+				<SYS_GPB_MFPH_PB8MFP_ADC0_CH0			&pcfg_default>,
+				<SYS_GPB_MFPH_PB9MFP_ADC0_CH1			&pcfg_default>,
+				<SYS_GPB_MFPH_PB10MFP_ADC0_CH2			&pcfg_default>,
+				<SYS_GPB_MFPH_PB11MFP_ADC0_CH3			&pcfg_default>,
+				<SYS_GPB_MFPH_PB12MFP_ADC0_CH4			&pcfg_default>,
+				<SYS_GPB_MFPH_PB13MFP_ADC0_CH5			&pcfg_default>,
+				<SYS_GPB_MFPH_PB14MFP_ADC0_CH6			&pcfg_default>,
+				<SYS_GPB_MFPH_PB15MFP_ADC0_CH7			&pcfg_default>;
+		};
+	};
+	
+	timer0 {
+		pinctrl_timer0: timer0grp {
+			nuvoton,pins =
+				<SYS_GPD_MFPH_PD8MFP_TM0			&pcfg_default>,
+				<SYS_GPD_MFPH_PD9MFP_TM0_EXT			&pcfg_default>;
+		};
+	};
+};
