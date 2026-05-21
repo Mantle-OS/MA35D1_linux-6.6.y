@@ -86,6 +86,26 @@
 		regulator-name = "volt0_sdhci1";
 		regulator-always-on;
         };
+
+	// regulator for the i2s0
+
+
+	sound {
+		compatible = "nuvoton,ma35d1-audio-nau8822";
+		label = "MA35D1-NAU8822";
+
+		dais = <&i2s0_port>;
+
+		// Need datasheet
+		// widgets =
+		// 	"Headphone", "Headphone Jack",
+		// 	"Microphone", "Mic Jack";
+  //
+		// routing =
+		// 	"Headphone Jack", "HP_OUT",
+		// 	"MIC_IN", "Mic Jack";
+	};
+
 };
 
 &mem {
@@ -246,6 +266,11 @@
 		compatible = "nuvoton,nau8822";
 		reg = <0x1a> ;
 		nuvoton,spk-btl;
+		port {
+			nau8822_ep: endpoint {
+				remote-endpoint = <&i2s0_ep>;
+			};
+		};
 	};
 };
 
@@ -269,19 +294,23 @@
 	};
 };
 
+
+// FIXME add regulator for GPIO
 &i2s0 {
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2s0>;
-	powerdown-gpios = <&gpiod 13 GPIO_ACTIVE_HIGH>; /* PD13 */
-};
-
-&i2s_pcm {
-	status = "okay";
-};
-
-&sound {
-	status = "okay";
+	// powerdown-gpios = <&gpiod 13 GPIO_ACTIVE_HIGH>; /* PD13 */
+	i2s0_port: port {
+		i2s0_ep: endpoint {
+			remote-endpoint = <&nau8822_ep>;
+			dai-format = "i2s";
+			bitclock-master;
+			frame-master;
+			 //  48000 * 256 = 12.288 MHz
+			// mclk-fs = <256>;
+		};
+	};
 };
 
 &qspi0 {

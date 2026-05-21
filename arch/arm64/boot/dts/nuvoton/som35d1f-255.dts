@@ -16,6 +16,8 @@
  https://github.com/OpenNuvoton/MA35D1_linux-6.6.y/blob/master/arch/arm64/boot/dts/nuvoton/ma35d1.dtsi#L1733
 */
 /delete-node/ &panel;
+/delete-node/ &sound;
+/delete-node/ &i2s_pcm;
 
 / {
 	model = "EMAC SOM-35D1F with SOM-255";
@@ -159,6 +161,21 @@
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <12288000>;
+	};
+
+	sound {
+		compatible = "nuvoton,ma35d1-audio-sgtl5000";
+		label = "MA35D1-SGTL5000";
+
+		dais = <&i2s0_port>;
+
+		widgets =
+			"Headphone", "Headphone Jack",
+			"Microphone", "Mic Jack";
+
+		routing =
+			"Headphone Jack", "HP_OUT",
+			"MIC_IN", "Mic Jack";
 	};
 
 	// Networking
@@ -358,6 +375,12 @@
 		clocks = <&audio_clk1>;
 
 		status = "okay";
+
+		port {
+			sgtl5000_ep: endpoint {
+				remote-endpoint = <&i2s0_ep>;
+			};
+		};
 	};
 };
 
@@ -384,23 +407,27 @@
 };
 
 // Audio
-&i2s0{
+
+&i2s0 {
 	status = "okay";
-	mclk_out = <12288000>;
+	nuvoton,tx-dma-reqsel = <86>;
+	nuvoton,rx-dma-reqsel = <87>;
 
-};
+	// interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
+	// clocks = <&clk I2S0_GATE>;
+	// resets = <&reset MA35D1_RESET_I2S0>;
+	// pdma_reqsel_tx = <86>;
+	// pdma_reqsel_rx = <87>;
 
-&i2s_pcm{
-	status = "okay";
-};
+	i2s0_port: port {
+		i2s0_ep: endpoint {
+			remote-endpoint = <&sgtl5000_ep>;
 
-// The sound driver from the SOC
-&sound {
-	status = "okay";
-	audio-codec = <&sgtl5000>;
-	codec-dai-name = "sgtl5000";
-
-	codec-sysclk-id = <0>;
-	codec-sysclk-rate = <12288000>;
-	nuvoton,disable-codec-pll;
+			dai-format = "i2s";
+			bitclock-master;
+			frame-master;
+			 //  48000 * 256 = 12.288 MHz
+			mclk-fs = <256>;
+		};
+	};
 };
