@@ -1,13 +1,21 @@
-# SPDX-License-Identifier: GPL-2.0
-# MA35D1 series audio
+# SPDX-License-Identifier: GPL-2.0-only
 
-snd-soc-ma35d1-pcm-objs := ma35d1-pcm.o
-snd-soc-ma35d1-i2s-objs := ma35d1-i2s.o
+# MA35D1 I2S CPU DAI + DMAengine PCM helper
+snd-soc-ma35d1-i2s-objs := \
+	ma35d1-i2s.o \
+	ma35d1-pcm.o
 
-obj-$(CONFIG_SND_SOC_MA35D1) += snd-soc-ma35d1-i2s.o snd-soc-ma35d1-pcm.o
-# obj-$(CONFIG_SND_SOC_MA35D1) += snd-soc-ma35d1-i2s.o
+obj-$(CONFIG_SND_SOC_MA35D1_I2S) += snd-soc-ma35d1-i2s.o
 
-# Boards
-snd-soc-ma35d1-audio-objs := ma35d1-audio.o
 
-obj-$(CONFIG_SND_SOC_MA35D1EVB) += snd-soc-ma35d1-audio.o
+# MA35D1 graph-backed card core
+snd-soc-ma35d1-card-objs := \
+	ma35d1-card.o
+
+snd-soc-ma35d1-card-$(CONFIG_SND_SOC_MA35D1_CARD_SGTL5000) += \
+	ma35d1-card-sgtl5000.o
+
+snd-soc-ma35d1-card-$(CONFIG_SND_SOC_MA35D1_CARD_NAU8822) += \
+	ma35d1-card-nau8822.o
+
+obj-$(CONFIG_SND_SOC_MA35D1_AUDIO_CARD) += snd-soc-ma35d1-card.o

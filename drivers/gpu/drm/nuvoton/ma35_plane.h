@@ -29,19 +29,19 @@ struct ma35_plane_property {
 };
 
 struct ma35_layer_config {
-	u32 depth;	// number of bits per pixel excluding padding bits
-	u32 fourcc;	// save drm_plane_state->drm_framebuffer->format, used to check colorkey
+	u32 depth;		// number of bits per pixel excluding padding bits
+	u32 fourcc;		// save drm_plane_state->drm_framebuffer->format, used to check colorkey
 
-	u32 blend_mode;	// this is Porter Duff, not the mode in drm_plane_state->pixel_blend_mode
+	u32 blend_mode;		// this is Porter Duff, not the mode in drm_plane_state->pixel_blend_mode
 	u16 alpha_mode[2];	// src, dst
-	u32 src_color;	// used for alpha mode, check color is work or only alpha
+	u32 src_color;		// used for alpha mode, check color is work or only alpha
 	u32 dst_color;
 	u32 swizzle;
-	u32 colorkeylo;	// available for ARGB only
+	u32 colorkeylo;		// available for ARGB only
 	u32 colorkeyup;
 
-	u32 background;	// ARGB for primary, RGB for cursor
-	u32 foreground;	// RGB for cursor, unused
+	u32 background;		// ARGB for primary, RGB for cursor
+	u32 foreground;		// RGB for cursor, unused
 	int32_t hotspot_x;
 	int32_t hotspot_y;
 };
@@ -54,16 +54,16 @@ struct ma35_layer {
 	u32 *formats; // available formats
 
 	// custom properties
-	struct drm_property *blend_mode_prop; // overlay
-	struct drm_property *src_alpha_mode_prop; // overlay
-	struct drm_property *dst_alpha_mode_prop; // overlay
-	struct drm_property *src_color_prop; // overlay
-	struct drm_property *dst_color_prop; // overlay
-	struct drm_property *swizzle_prop; // primary, overlay
-	struct drm_property *colorkeylo_prop; // primary, overlay
+	struct drm_property *blend_mode_prop; 		// overlay
+	struct drm_property *src_alpha_mode_prop; 	// overlay
+	struct drm_property *dst_alpha_mode_prop;	// overlay
+	struct drm_property *src_color_prop; 		// overlay
+	struct drm_property *dst_color_prop; 		// overlay
+	struct drm_property *swizzle_prop; 		// primary, overlay
+	struct drm_property *colorkeylo_prop; 		// primary, overlay
 	struct drm_property *colorkeyup_prop;
-	struct drm_property *background_prop; // primary
-	struct drm_property *foreground_prop; // unused
+	struct drm_property *background_prop; 		// primary
+	struct drm_property *foreground_prop; 		// unused
 
 	// operation
 	struct ma35_layer_config config;
@@ -71,13 +71,13 @@ struct ma35_layer {
 };
 
 enum ma35_format_enum {
-	MA35_FORMAT_X4R4G4B4,	// DRM_FORMAT_XRGB4444
-	MA35_FORMAT_A4R4G4B4,	// DRM_FORMAT_ARGB4444
-	MA35_FORMAT_X1R5G5B5,	// DRM_FORMAT_XRGB1555
-	MA35_FORMAT_A1R5G5B5,	// DRM_FORMAT_ARGB1555
+	MA35_FORMAT_X4R4G4B4,		// DRM_FORMAT_XRGB4444
+	MA35_FORMAT_A4R4G4B4,		// DRM_FORMAT_ARGB4444
+	MA35_FORMAT_X1R5G5B5,		// DRM_FORMAT_XRGB1555
+	MA35_FORMAT_A1R5G5B5,		// DRM_FORMAT_ARGB1555
 	MA35_FORMAT_R5G6B5,		// DRM_FORMAT_RGB565
-	MA35_FORMAT_X8R8G8B8,	// DRM_FORMAT_XRGB8888
-	MA35_FORMAT_A8R8G8B8,	// DRM_FORMAT_ARGB8888
+	MA35_FORMAT_X8R8G8B8,		// DRM_FORMAT_XRGB8888
+	MA35_FORMAT_A8R8G8B8,		// DRM_FORMAT_ARGB8888
 	MA35_FORMAT_YUY2,		// YUV422, DRM_FORMAT_YUYV
 	MA35_FORMAT_UYVY,		// YUV422, DRM_FORMAT_UYVY
 	MA35_FORMAT_INDEX8,
@@ -89,7 +89,7 @@ enum ma35_format_enum {
 	MA35_FORMAT_RG16,
 	MA35_FORMAT_R8,
 	MA35_FORMAT_NV12_10BIT,
-	MA35_FORMAT_A2R10G10B10, // DRM_FORMAT_ARGB2101010
+	MA35_FORMAT_A2R10G10B10, 	// DRM_FORMAT_ARGB2101010
 	MA35_FORMAT_NV16_10BIT,
 	MA35_FORMAT_INDEX1,
 	MA35_FORMAT_INDEX2,
@@ -175,8 +175,8 @@ enum ma35_alpha_blend_enum {
 	FIELD_PREP(MA35_DST_BLENDING_MODE, MA35_ALPHA_BLEND_INVERSED)
 
 // colorkey
-#define MA35_COLORKEY_ENABLE	2
-#define MA35_COLORKEY_DISABLE	0
+#define MA35_COLORKEY_ENABLE		2
+#define MA35_COLORKEY_DISABLE		0
 
 #define MA35_CURSOR_SIZE		32
 #define MA35_CURSOR_DEPTH		24
@@ -201,8 +201,8 @@ enum ma35_cursor_formats_enum {
 #define MA35_PRIMARY_RESET		BIT(4)
 #define MA35_PRIMARY_CLEAR		BIT(8)
 #define MA35_PRIMARY_TRANSPARENCY_MASK	GENMASK(10, 9)
-#define MA35_PRIMARY_SWIZZLE_MASK		GENMASK(25, 23)
-#define MA35_PRIMARY_FORMAT_MASK		GENMASK(31, 26)
+#define MA35_PRIMARY_SWIZZLE_MASK	GENMASK(25, 23)
+#define MA35_PRIMARY_FORMAT_MASK	GENMASK(31, 26)
 
 #define MA35_OVERLAY_ENABLE		BIT(24)
 #define MA35_OVERLAY_CLEAR		BIT(25)
@@ -221,7 +221,7 @@ enum ma35_swizzles_enum {
 	MA35_SWIZZLE_UV, // enable if not U in lower, V in upper
 };
 
-#define MA35_LAYER_FB_HEIGHT	GENMASK(29, 15)
+#define MA35_LAYER_FB_HEIGHT		GENMASK(29, 15)
 #define MA35_LAYER_FB_WIDTH		GENMASK(14, 0)
 
 #define MA35_OVERLAY_POSITION_Y_MASK	MA35_LAYER_FB_HEIGHT

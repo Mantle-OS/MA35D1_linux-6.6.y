@@ -53,11 +53,12 @@ static uint32_t ma35_cursor_formats[] = {
 static struct ma35_plane_property ma35_plane_properties[] = {
 	{ // overlay
 		.fb_addr    = { MA35_OVERLAY_ADDRESS,
-						MA35_OVERLAY_UPLANAR_ADDRESS,
-						MA35_OVERLAY_VPLANAR_ADDRESS },
+				MA35_OVERLAY_UPLANAR_ADDRESS,
+				MA35_OVERLAY_VPLANAR_ADDRESS },
+
 		.fb_stride  = { MA35_OVERLAY_STRIDE,
-						MA35_OVERLAY_USTRIDE,
-						MA35_OVERLAY_VSTRIDE },
+				MA35_OVERLAY_USTRIDE,
+				MA35_OVERLAY_VSTRIDE },
 		.alpha      = true,
 		.swizzle    = true,
 		.colorkey   = true, // ARGB only, replaced with primary
@@ -65,11 +66,12 @@ static struct ma35_plane_property ma35_plane_properties[] = {
 	},
 	{ // primary
 		.fb_addr    = { MA35_FRAMEBUFFER_ADDRESS,
-						MA35_FRAMEBUFFER_UPLANAR_ADDRESS,
-						MA35_FRAMEBUFFER_VPLANAR_ADDRESS },
+				MA35_FRAMEBUFFER_UPLANAR_ADDRESS,
+				MA35_FRAMEBUFFER_VPLANAR_ADDRESS },
+
 		.fb_stride  = { MA35_FRAMEBUFFER_STRIDE,
-						MA35_FRAMEBUFFER_USTRIDE,
-						MA35_FRAMEBUFFER_VSTRIDE },
+				MA35_FRAMEBUFFER_USTRIDE,
+				MA35_FRAMEBUFFER_VSTRIDE },
 		.alpha      = false,
 		.swizzle    = true,
 		.colorkey   = true, // ARGB only, replaced with background
@@ -235,7 +237,7 @@ static int ma35_layer_blend_mode_select(u32 mode, u32 *reg)
  * cursor: cursor size, hotspot
  */
 static int ma35_plane_atomic_check(struct drm_plane *drm_plane,
-				      struct drm_atomic_state *state)
+				struct drm_atomic_state *state)
 {
 	struct drm_device *drm_dev = drm_plane->dev;
 	struct ma35_layer *layer = ma35_layer(drm_plane);
@@ -283,26 +285,30 @@ static int ma35_plane_atomic_check(struct drm_plane *drm_plane,
 
 	can_position = (drm_plane->type != DRM_PLANE_TYPE_PRIMARY);
 	return drm_atomic_helper_check_plane_state(new_state, crtc_state,
-						  DRM_PLANE_NO_SCALING, DRM_PLANE_NO_SCALING,
-						  can_position, true);
+				DRM_PLANE_NO_SCALING, DRM_PLANE_NO_SCALING,
+				can_position, true);
 }
 
 static int ma35_cursor_plane_atomic_check(struct drm_plane *drm_plane,
-				      struct drm_atomic_state *state)
+				    struct drm_atomic_state *state)
 {
 	struct drm_device *drm_dev = drm_plane->dev;
+
 	struct drm_plane_state *new_state =
 		drm_atomic_get_new_plane_state(state, drm_plane);
+
 	struct drm_framebuffer *fb = new_state->fb;
 	struct drm_crtc *crtc = new_state->crtc;
 	struct drm_crtc_state *crtc_state;
 
 	// allowed for user deattach cursor plane
-	if(!fb)
+	if(!fb) {
 		return 0;
+	}
 
-	if (!crtc)
+	if (!crtc) {
 		return -EINVAL;
+	}
 
 	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 	if (WARN_ON(!crtc_state))
@@ -319,19 +325,21 @@ static int ma35_cursor_plane_atomic_check(struct drm_plane *drm_plane,
 		return -EINVAL;
 	}
 
-	return drm_atomic_helper_check_plane_state(new_state, crtc_state,
-						  DRM_PLANE_NO_SCALING, DRM_PLANE_NO_SCALING,
-						  true, true);
+	return drm_atomic_helper_check_plane_state(
+			new_state, crtc_state,
+			DRM_PLANE_NO_SCALING, DRM_PLANE_NO_SCALING,
+			true, true);
 }
 
 static int ma35_cursor_plane_atomic_async_check(struct drm_plane *drm_plane,
-				      struct drm_atomic_state *state)
+						struct drm_atomic_state *state)
 {
 	return ma35_cursor_plane_atomic_check(drm_plane, state);
 }
 
 static void ma35_overlay_position_update(struct ma35_drm *priv,
-						int x, int y, uint32_t w, uint32_t h)
+					int x, int y,
+					uint32_t w, uint32_t h)
 {
 	u32 reg;
 	int right, bottom;
@@ -349,7 +357,7 @@ static void ma35_overlay_position_update(struct ma35_drm *priv,
 	regmap_write(priv->regmap, MA35_OVERLAY_TL, reg);
 
 	reg = FIELD_PREP(MA35_OVERLAY_POSITION_X_MASK, right) |
-		  FIELD_PREP(MA35_OVERLAY_POSITION_Y_MASK, bottom);
+		FIELD_PREP(MA35_OVERLAY_POSITION_Y_MASK, bottom);
 	regmap_write(priv->regmap, MA35_OVERLAY_BR, reg);
 }
 
@@ -369,26 +377,41 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 	struct ma35_drm *priv = ma35_drm(drm_plane->dev);
 	struct drm_plane_state *new_state =
 		drm_atomic_get_new_plane_state(state, drm_plane);
+
 	struct drm_framebuffer *fb = new_state->fb;
 	u32 format, bpp, reg;
 	u32 *preg;
+
+	// drm_info(drm_plane->dev,
+	// 	 "PLANE UPDATE BEGIN: type=%u fb=%ux%u fourcc=0x%08x visible=%u crtc=%p\n",
+	// 	 drm_plane->type,
+	// 	 fb->width, fb->height,
+	// 	 fb->format->format,
+	// 	 new_state->visible,
+	// 	 new_state->crtc);
 
 	layer->config.fourcc = fb->format->format;
 	ma35_layer_format_validate(fb->format->format, &format, &bpp);
 
 	if (drm_plane->type == DRM_PLANE_TYPE_PRIMARY) {
 		reg = FIELD_PREP(MA35_PRIMARY_FORMAT_MASK, format) |
-			  FIELD_PREP(MA35_PRIMARY_SWIZZLE_MASK, layer->config.swizzle) |
-			  MA35_PRIMARY_RESET | MA35_PRIMARY_ENABLE;
+			FIELD_PREP(MA35_PRIMARY_SWIZZLE_MASK, layer->config.swizzle) |
+			MA35_PRIMARY_RESET | MA35_PRIMARY_ENABLE;
+
 		if(layer->config.colorkeylo || layer->config.colorkeyup) {
 			reg |= FIELD_PREP(MA35_PRIMARY_TRANSPARENCY_MASK, MA35_COLORKEY_ENABLE);
 		} else {
 			reg |= FIELD_PREP(MA35_PRIMARY_TRANSPARENCY_MASK, MA35_COLORKEY_DISABLE);
 		}
+
+		// drm_info(drm_plane->dev,
+		// 	"PLANE PRIMARY CONFIG BUILD: format=%u bpp=%u swizzle=%u config=0x%08x\n",
+		// 	format, bpp, layer->config.swizzle, reg);
+
 		regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, reg);
 
 		reg = FIELD_PREP(MA35_LAYER_FB_HEIGHT, fb->height) |
-			  FIELD_PREP(MA35_LAYER_FB_WIDTH, fb->width);
+				FIELD_PREP(MA35_LAYER_FB_WIDTH, fb->width);
 		regmap_write(priv->regmap, MA35_FRAMEBUFFER_SIZE, reg);
 
 		// background
@@ -400,10 +423,12 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 		// colorkey
 		regmap_write(priv->regmap, MA35_FRAMEBUFFER_COLORKEY, layer->config.colorkeylo);
 		regmap_write(priv->regmap, MA35_FRAMEBUFFER_COLORHIGHKEY, layer->config.colorkeyup);
+
 	} else if (drm_plane->type == DRM_PLANE_TYPE_OVERLAY) {
 		reg = FIELD_PREP(MA35_OVERLAY_FORMAT_MASK, format) |
-			  FIELD_PREP(MA35_OVERLAY_SWIZZLE_MASK, layer->config.swizzle) |
-			  MA35_OVERLAY_ENABLE;
+			FIELD_PREP(MA35_OVERLAY_SWIZZLE_MASK, layer->config.swizzle) |
+			MA35_OVERLAY_ENABLE;
+
 		if(layer->config.colorkeylo || layer->config.colorkeyup) {
 			reg |= FIELD_PREP(MA35_OVERLAY_TRANSPARENCY_MASK, MA35_COLORKEY_ENABLE);
 		} else {
@@ -412,16 +437,18 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 		regmap_write(priv->regmap, MA35_OVERLAY_CONFIG, reg);
 
 		reg = FIELD_PREP(MA35_LAYER_FB_HEIGHT, fb->height) |
-			FIELD_PREP(MA35_LAYER_FB_WIDTH, fb->width);
+				FIELD_PREP(MA35_LAYER_FB_WIDTH, fb->width);
 		regmap_write(priv->regmap, MA35_OVERLAY_SIZE, reg);
+
 		// can_position
 		ma35_overlay_position_update(priv, new_state->crtc_x, new_state->crtc_y,
 			new_state->crtc_w, new_state->crtc_h);
+
 		// alpha blending
 		if (fb->format->format == DRM_FORMAT_ARGB8888) {
 			ma35_layer_blend_mode_select(layer->config.blend_mode, &reg);
 			reg |= FIELD_PREP(MA35_SRC_ALPHA_MODE, (u32)layer->config.alpha_mode[0]) |
-				   FIELD_PREP(MA35_DST_ALPHA_MODE, (u32)layer->config.alpha_mode[1]);
+				FIELD_PREP(MA35_DST_ALPHA_MODE, (u32)layer->config.alpha_mode[1]);
 			regmap_write(priv->regmap, MA35_OVERLAY_ALPHA_BLEND_CONFIG, reg);
 
 			regmap_write(priv->regmap, MA35_OVERLAY_SRC_GLOBAL_COLOR, layer->config.src_color);
@@ -442,11 +469,29 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 	// retrieves DMA address set by userspace, see drm_mode_fb_cmd2
 	for (int i = 0; i < fb->format->num_planes; i++) {
 		layer->fb_base[i] = drm_fb_dma_get_gem_addr(fb, new_state, i);
+
+		// drm_info(drm_plane->dev,
+		// 	"PLANE FB[%d]: type=%u dma=%pad pitch=%u addr_reg=0x%04x stride_reg=0x%04x\n",
+		// 	i, drm_plane->type,
+		// 	&layer->fb_base[i],
+		// 	fb->pitches[i],
+		// 	ma35_plane_properties[drm_plane->type].fb_addr[i],
+		// 	ma35_plane_properties[drm_plane->type].fb_stride[i]);
+
 		preg = ma35_plane_properties[drm_plane->type].fb_addr;
 		regmap_write(priv->regmap, preg[i], layer->fb_base[i]);
 		preg = ma35_plane_properties[drm_plane->type].fb_stride;
 		regmap_write(priv->regmap, preg[i], fb->pitches[i]);
 	}
+
+	// drm_info(drm_plane->dev,
+	// 	"PLANE UPDATE END: type=%u fb=%ux%u fourcc=0x%08x pitch=%u dma=%pad\n",
+	// 	drm_plane->type,
+	// 	fb->width, fb->height,
+	// 	fb->format->format,
+	// 	fb->pitches[0],
+	// 	&layer->fb_base[0]);
+
 }
 
 static void ma35_cursor_position_update(struct ma35_drm *priv, int x, int y)
@@ -776,21 +821,22 @@ static int ma35_cursor_of_parse(struct ma35_drm *priv,
 	}
 
 	u32 reg;
-	reg = FIELD_PREP(MA35_CURSOR_HOTSPOT_X_MASK, layer->config.hotspot_x) |
-		  FIELD_PREP(MA35_CURSOR_HOTSPOT_Y_MASK, layer->config.hotspot_y);
+	reg = FIELD_PREP(MA35_CURSOR_HOTSPOT_X_MASK,
+			layer->config.hotspot_x) |
+			FIELD_PREP(MA35_CURSOR_HOTSPOT_Y_MASK, layer->config.hotspot_y);
+
 	regmap_write(priv->regmap, MA35_CURSOR_CONFIG, reg);
 
 	return 0;
 }
 
-struct ma35_layer *ma35_layer_get_from_index(struct ma35_drm *priv,
-						   u32 index)
+struct ma35_layer *ma35_layer_get_from_index(struct ma35_drm *priv, u32 index)
 {
 	struct ma35_layer *layer;
-
 	list_for_each_entry(layer, &priv->layers_list, list) {
-		if (layer->index == index)
+		if (layer->index == index){
 			return layer;
+		}
 	}
 
 	return NULL;
@@ -803,16 +849,17 @@ struct ma35_layer *ma35_layer_get_from_type(struct ma35_drm *priv, enum drm_plan
 
 	list_for_each_entry(layer, &priv->layers_list, list) {
 		drm_plane = &layer->drm_plane;
-		if (drm_plane->type == type)
+		if (drm_plane->type == type){
 			return layer;
+		}
 	}
 
 	return NULL;
 }
 
 static int ma35_layer_create(struct ma35_drm *priv,
-			      struct device_node *of_node, u32 index,
-			      enum drm_plane_type type)
+				struct device_node *of_node, u32 index,
+				enum drm_plane_type type)
 {
 	struct drm_device *drm_dev = &priv->drm_dev;
 	struct device *dev = drm_dev->dev;
@@ -834,6 +881,7 @@ static int ma35_layer_create(struct ma35_drm *priv,
 			1 << MA35_DEFAULT_CRTC_ID,
 			&ma35_plane_funcs, ma35_cursor_formats,
 			ARRAY_SIZE(ma35_cursor_formats), NULL, type, NULL);
+
 		if (ret) {
 			drm_err(drm_dev, "Failed to initialize layer plane\n");
 			return ret;
@@ -843,12 +891,15 @@ static int ma35_layer_create(struct ma35_drm *priv,
 			drm_err(drm_dev, "Unsupported cursor hotspot offset\n");
 			goto error;
 		}
+
 		drm_plane_helper_add(&layer->drm_plane, &ma35_cursor_plane_helper_funcs);
+
 	} else {
 		ret = drm_universal_plane_init(drm_dev, &layer->drm_plane,
 			1 << MA35_DEFAULT_CRTC_ID,
 			&ma35_plane_funcs, ma35_layer_formats,
 			ARRAY_SIZE(ma35_layer_formats), NULL, type, NULL);
+
 		if (ret) {
 			drm_err(drm_dev, "Failed to initialize layer plane\n");
 			return ret;
@@ -859,13 +910,14 @@ static int ma35_layer_create(struct ma35_drm *priv,
 				index);
 			goto error;
 		}
+
 		drm_plane_helper_add(&layer->drm_plane, &ma35_plane_helper_funcs);
 	}
 
 	drm_plane_create_zpos_immutable_property(&layer->drm_plane, index);
 
 	of_property_read_string(of_node, "layer-type", &str);
-	drm_info(drm_dev, "Registering layer #%d as %s\n", index, str);
+	// drm_info(drm_dev, "Registering layer #%d as %s\n", index, str);
 
 	list_add_tail(&layer->list, &priv->layers_list);
 
@@ -896,8 +948,9 @@ void ma35_overlay_attach_crtc(struct ma35_drm *priv)
 
 	list_for_each_entry(layer, &priv->layers_list, list) {
 		drm_plane = &layer->drm_plane;
-		if (drm_plane->type != DRM_PLANE_TYPE_OVERLAY)
+		if (drm_plane->type != DRM_PLANE_TYPE_OVERLAY){
 			continue;
+		}
 
 		drm_plane->possible_crtcs = possible_crtcs;
 	}
@@ -911,16 +964,15 @@ static bool ma35_of_node_is_layer(struct device_node *of_node)
 static int ma35_get_layer_type(const char *type_str, enum drm_plane_type *type)
 {
 	int ret = 0;
-
-	if (!strcmp(type_str, "primary"))
+	if (!strcmp(type_str, "primary")) {
 		*type = DRM_PLANE_TYPE_PRIMARY;
-	else if (!strcmp(type_str, "overlay"))
+	} else if (!strcmp(type_str, "overlay")) {
 		*type = DRM_PLANE_TYPE_OVERLAY;
-	else if (!strcmp(type_str, "cursor"))
+	} else if (!strcmp(type_str, "cursor")) {
 		*type = DRM_PLANE_TYPE_CURSOR;
-	else
+	} else {
 		ret = -1;
-
+	}
 	return ret;
 }
 
@@ -947,13 +999,14 @@ int ma35_plane_init(struct ma35_drm *priv)
 	for_each_child_of_node(layers_node, layer_node) {
 		index = 0;
 
-		if (!ma35_of_node_is_layer(layer_node))
+		if (!ma35_of_node_is_layer(layer_node)){
 			continue;
+		}
 
 		ret = of_property_read_u32(layer_node, "layer-id", &index); // index in layer node
-		if (ret)
+		if (ret) {
 			continue;
-
+		}
 		ret = of_property_read_string(layer_node, "layer-type", &layer_type_str); // layer type
 		if (ret) {
 			dev_err(dev, "Failed to read 'layer-type' from node %s\n",
@@ -970,7 +1023,8 @@ int ma35_plane_init(struct ma35_drm *priv)
 		// check if layer already exists
 		layer = ma35_layer_get_from_index(priv, index);
 		if (layer) {
-			drm_err(drm_dev, "Duplicated entry for layer#%d\n", // we support one layer per index
+			// we support one layer per index
+			drm_err(drm_dev, "Duplicated entry for layer#%d\n",
 				index);
 			continue;
 		}

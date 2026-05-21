@@ -1,0 +1,406 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * som-35d1f-2xx.dts - Device Tree file for the SOM-35D1F w/ 2xx EMAC Carriers.
+ *
+ * Copyright (C) 2023 EMAC Inc.
+ *
+ */
+
+/dts-v1/;
+#include "som35d1f.dtsi"
+
+
+/*
+ remove the panel that they have upstream its driver is setup for compatible = "avic,tm070ddh03", "panel-dpi";
+ so we delete and create the fema_panel below
+ https://github.com/OpenNuvoton/MA35D1_linux-6.6.y/blob/master/arch/arm64/boot/dts/nuvoton/ma35d1.dtsi#L1733
+*/
+/delete-node/ &panel;
+
+/ {
+	model = "EMAC SOM-35D1F with SOM-255";
+	compatible = "emac,som35d1f", "nuvoton,ma35d1";
+
+	reserved-memory {
+		display_buf: display_buf@0 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x8C800000 0x0 0x3000000>; /* 48MiB */
+			no-map;
+		};
+		vc8k_buf: vc8k_buf@0 {
+			reg = <0x0 0x8A800000 0x0 0x2000000>; /* 32MiB */
+			no-map;
+		};
+		gc520l_buf: gc520l_buf@0 {
+			reg = <0x0 0x8A000000 0x0 0x800000>; /* 8MiB */
+			no-map;
+		};
+		rproc_buf: rproc_buf@0 {
+			reg = <0x0 0x80020000 0x0 0x60000>; /* 384KB */
+			no-map;
+		};
+	};
+
+	reg_1p5v: regulator0 {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-1.5V";
+		regulator-min-microvolt = <1500000>;
+		regulator-max-microvolt = <1500000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	reg_1p8v: regulator1 {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-1.8V";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	reg_3p3_vcc: regulator2 {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-3.3V";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+
+
+	// The regulator for the bridge and panel.
+	lvds_3v3_reg: fixedregulator {
+		compatible = "regulator-fixed";
+		regulator-name = "lvds-3v3-en-regulator";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		startup-delay-us = <70000>;
+		gpio = <&gpio_expander 9 GPIO_ACTIVE_HIGH>;  // Issue this expanger lives on i2c which comes up after DRM
+		// enable-active-high;
+		regulator-always-on; // hack to test the regulators
+		regulator-boot-on;   // hack to test the regulators
+		status = "okay";
+	};
+
+	// The backlight.
+	pwm_backlight: backlight {
+		compatible = "pwm-backlight";
+		brightness-levels = <0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
+		    20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42
+		    43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65
+		    66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88
+		    89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108
+		    109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125
+		    126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142
+		    143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159
+		    160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176
+		    177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 192 193
+		    194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210
+		    211 212 213 214 215 216 217 218 219 220 221 222 223 224 225 226 227
+		    228 229 230 231 232 233 234 235 236 237 238 239 240 241 242 243 244
+		    245 246 247 248 249 250 251 252 253 254 255
+		>;
+		default-brightness-level = <128>;
+		pwms = <&epwm2 0 50000>;
+		enable-gpios = <&gpio_expander 0 GPIO_ACTIVE_HIGH>; // again the i2c and race
+		status = "okay";
+	};
+
+	// Ref des: U13
+	// Chip: sn65lvds84aq-q1
+	// Datasheet: https://www.ti.com/lit/ds/symlink/sn65lvds84aq-q1.pdf
+	// Note: The SN65LVDS84AQ datasheet says the transmitter loads D0–D20 on the falling edge of CLKIN; the setup/hold table also specifies data valid before and after CLKIN↓, with 3 ns setup and 1.5 ns hold.
+	lvds_bridge: bridge-lvds {
+		compatible = "lvds-encoder";
+		power-supply = <&lvds_3v3_reg>;
+		status = "okay";
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				bridge_in: endpoint {
+					remote-endpoint = <&dpi_out>;
+				};
+			};
+			port@1 {
+				reg = <1>;
+				bridge_out: endpoint {
+					remote-endpoint = <&panel_in>;
+				};
+			};
+		};
+	};
+
+	// Refdes: HDR6
+	// Chip: Fema GM800480D-70-TTX2NLW panel
+	// datasheet -> https://femaelectronics.com/wp-content/uploads/datasheet/GM800480D-70-TTX2NLW-HTL.pdf
+	// NOTES: 40 pin connectror after the bridge. and where the tsc2004 comes in from i2c
+	fema_panel: panel-fema {
+		compatible = "fema,gm800480d-70";
+		backlight = <&pwm_backlight>;
+		power-supply = <&lvds_3v3_reg>;
+		// data-mapping = "jedec";
+		data-mapping = "jeida-18";
+
+		status = "okay";
+		port {
+			panel_in: endpoint@0 {
+				reg = <0>;
+				remote-endpoint = <&bridge_out>;
+			};
+		};
+	};
+
+
+	audio_clk1: audio-clk1 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <12288000>;
+	};
+
+	// Networking
+	wlan_en_reg: regulator-wlan-en {
+		compatible = "regulator-fixed";
+		regulator-name = "wlan-en";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&gpio_expander 1 GPIO_ACTIVE_HIGH>;
+
+		startup-delay-us = <70000>;
+		enable-active-high;
+		regulator-always-on;
+		// regulator-boot-on;   // hack to test the regulators
+	};
+
+	// pcfg_wl1837: pcfg_wl1837 {
+	// 	slew-rate = <1>;        /* Normal slew rate (balanced speed/EMI) */
+	// 	input-schmitt-enable;   /* Enable Schmitt trigger for noise immunity */
+	// 	bias-disable;           /* No pull-up/pull-down (module handles biasing) */
+	// 	power-source = <3300>;  /* 3.3V I/O voltage (common for Bluetooth modules) */
+	// 	drive-strength = <7>;   /* Medium-high drive strength (adjust based on trace length) */
+	// };
+
+};
+
+
+&gpio_expander {
+	gpio-line-names =
+		"BK_ON_OFF", "WIFI_EN", "BT_EN", "GPIO_INT_A",
+		"GPIO_INT_B", "CAM1_IO0", "CAM1_IO1", "USB_OTG_INT#",
+		"HALF_DUP", "LVDS_2VE", "HNDY_GPIO_10", "BUZZER",
+		"IRQ0", "IRQ1", "", "" ;
+};
+
+
+
+/*
+ * There is no driver for this anymore sadly :( . The vendor says "Its not worth their time and effort"
+ * However upstream examples still show this active(status="okay"). Might be a case for etnaviv drm if supported
+*/
+&gc520l {
+	// @40280000
+	// needs | compatible = "vivante,gc";
+	// current | clocks = <&clk GFX_GATE>;
+	// needs | clock-names: "core"; ?
+	// needs: | power-domains = <&gpc 1>;
+	// current | resets = <&reset MA35D1_RESET_GFX>;
+	memory-region = <&gc520l_buf>;
+	status = "okay";
+};
+
+// This driver needs to be installed correctly atm it is not...
+&vc8k {
+	fb_width = <800>;
+	fb_height = <480>;
+	memory-region = <&vc8k_buf>;
+	status = "okay";
+};
+
+&display {
+	memory-region = <&display_buf>;
+	// OPTIONS:  0: D16CFG1, 1: D16CFG2, 2: D16CFG3, 3: D18CFG1, 4: D18CFG2, 5: D24
+	nuvoton,dpi-format = <4>;
+	status = "okay";
+	port {
+		/delete-node/ endpoint@0;
+		dpi_out: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&bridge_in>;
+		};
+	};
+};
+
+/*
+ * 7-inch touch connector CN4 is intentionally cross-mapped.
+ *
+ * Panel touch unit:
+ *   pin 1 XR / Right  -> TOUCH_Y+ -> TSC2004 Y+
+ *   pin 2 YU / Top    -> TOUCH_X- -> TSC2004 X-
+ *   pin 3 XL / Left   -> TOUCH_Y- -> TSC2004 Y-
+ *   pin 4 YD / Bottom -> TOUCH_X+ -> TSC2004 X+
+ *
+ * This means panel X/Y are swapped relative to TSC2004 X/Y, AND axis has inversion
+ */
+&tsc2004 {
+	touchscreen-size-x = <800>;
+	touchscreen-size-y = <480>;
+	touchscreen-x-mm = <152>;
+	touchscreen-y-mm = <91>;
+
+	// touchscreen-inverted-y;
+	// touchscreen-inverted-x;
+
+	touchscreen-swapped-x-y;
+
+	status = "okay";
+};
+
+&gmac1 {
+	status = "okay";
+	phy-mode = "rmii";
+	phy-handle = <&eth_phy1>;
+	emac-phy-reset = <&gpio_expander_on_carrier 10 GPIO_ACTIVE_HIGH>;
+	mdio1: mdio{
+		compatible = "snps,dwmac-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		eth_phy1: ethernet-phy@1{
+			compatible = "ethernet-phy-id0007.0570";
+			vsc8531,vddmac = <3300>;
+			vsc8531,edge-slowdown = <7>;
+			interrupts-extended = <&gpiog 0 IRQ_TYPE_EDGE_FALLING>;
+			reg = <0>;
+		};
+	};
+};
+
+&sdhci1 {
+	/delete-property/ cd-gpios;
+	/delete-property/ wp-gpios;
+
+	disable-wp;
+	vmmc-supply = <&wlan_en_reg>;
+
+	bus-width = <4>;
+	non-removable;
+	cap-power-off-card;
+	keep-power-in-suspend;
+	no-1-8-v;
+
+	status = "okay";
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	wlcore: wlcore@2 {
+		status = "okay";
+		compatible = "ti,wl1837";
+		reg = <2>;
+		interrupt-parent = <&gpiog>;
+		interrupts = <0 IRQ_TYPE_EDGE_FALLING>;
+	};
+};
+
+
+&i2c1 {
+	// Refdes: U32
+	// Chip: MCP23018T-E/MJ
+	// Datasheet: https://ww1.microchip.com/downloads/en/DeviceDoc/22103a.pdf
+	gpio_expander_on_carrier: mirochip_gpio_expander_on_carrier@21 {
+		compatible = "microchip,mcp23018";
+		reg = <0x21>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		// interrupt-names = "gpio_expander_on_carrier@21 irq";
+
+		interrupt-parent = <&gpio_expander>;
+		interrupts = <4 IRQ_TYPE_LEVEL_LOW>, <5 IRQ_TYPE_LEVEL_LOW>; // GPIO_INI_A, GPIO_INIT_B
+		interrupt-controller;
+		#interrupt-cells=<2>;
+
+		gpio-line-names =
+			"NC", "HNDY_GPIO_1", "HNDY_GPIO_2", "HNDY_GPIO_3",
+			"HNDY_GPIO_4", "HNDY_GPIO_5", "HNDY_GPIO_6", "HNDY_GPIO_7",
+			"HNDY_GPIO_8", "HNDY_GPIO_9", "ETH2_EN", "RED_LED",
+			"GRN_LED", "DISP1_IO0", "DISP1_IO2", "NC" ;
+
+		status = "okay";
+	};
+
+	// Refdes: U23
+	// Chip: 24WC32
+	// DataSheet: https://www.st.com/resource/en/datasheet/m24c32-x.pdf
+	eeprom_on_carrier: eeprom@51 {
+		compatible = "atmel,24c32";
+		pagesize = <32>;
+		reg = <0x51>;
+		status = "okay";
+
+	};
+
+	// The Audio Codec
+	// Refdes: U15
+	// Chip: SGTL5000XNLA3
+	// Datasheet: https://www.nxp.com/docs/en/data-sheet/SGTL5000.pdf
+	sgtl5000: audio-codec@0a {
+		compatible = "fsl,sgtl5000";
+		reg = <0x0a>;
+
+		#sound-dai-cells = <0>;
+
+		VDDA-supply = <&reg_3p3_vcc>;
+		VDDIO-supply = <&reg_3p3_vcc>;
+		VDDD-supply = <&reg_1p5v>;
+
+		clocks = <&audio_clk1>;
+
+		status = "okay";
+	};
+};
+
+&uart3 {
+	bluetooth: wl1837st {
+		compatible = "ti,wl1837-st";
+		enable-gpios = <&gpio_expander 2 GPIO_ACTIVE_HIGH>;
+		max-speed = <912600>;
+		status = "okay";
+	};
+};
+
+&spi0 {
+	// userland spidev support for headers and pins. we have 2 chip selects
+	// CS1 and CS3 this all gets routed to HDR7
+	spi_dev_0: spidev00@1 {
+		compatible = "emac,spidev";
+		reg = <1>;
+	};
+	spi_dev_1: spidev1@3 {
+		compatible = "emac,spidev";
+		reg = <3>;
+	};
+};
+
+// Audio
+&i2s0{
+	status = "okay";
+	mclk_out = <12288000>;
+
+};
+
+&i2s_pcm{
+	status = "okay";
+};
+
+// The sound driver from the SOC
+&sound {
+	status = "okay";
+	audio-codec = <&sgtl5000>;
+	codec-dai-name = "sgtl5000";
+
+	codec-sysclk-id = <0>;
+	codec-sysclk-rate = <12288000>;
+	nuvoton,disable-codec-pll;
+};

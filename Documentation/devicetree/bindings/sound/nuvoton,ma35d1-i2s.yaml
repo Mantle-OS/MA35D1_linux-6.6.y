@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/nuvoton,ma35d1-i2s.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton MA35D1 I2S Controller
+
+maintainers:
+  - Joseph Mills <josephjamesmills@gmail.com>
+
+description:
+  The Nuvoton MA35D1 I2S controller provides a CPU DAI for external
+  audio codecs. It supports playback and capture through DMA and may
+  be connected to codecs using audio graph endpoints.
+
+allOf:
+  - $ref: dai-common.yaml#
+
+properties:
+  compatible:
+    enum:
+      - nuvoton,ma35d1-i2s
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+    description:
+      I2S controller interrupt. This is optional because DMA-only
+      operation may not require the interrupt line.
+
+  clocks:
+    minItems: 1
+    maxItems: 2
+    description:
+      Clocks used by the I2S controller. The i2s clock is the controller
+      functional clock. The optional mclk clock may be used as the parent
+      or source for the externally driven master clock when the SoC clock
+      tree exposes it separately.
+
+  clock-names:
+    minItems: 1
+    maxItems: 2
+    items:
+      enum:
+        - i2s
+        - mclk
+
+  resets:
+    maxItems: 1
+
+  dmas:
+    minItems: 1
+    maxItems: 2
+    description:
+      DMA channels used by the I2S controller. A full-duplex controller
+      normally provides one TX DMA channel and one RX DMA channel.
+
+  dma-names:
+    oneOf:
+      - items:
+          - const: tx
+          - const: rx
+      - items:
+          - const: tx
+      - items:
+          - const: rx
+
+  '#sound-dai-cells':
+    const: 0
+
+  port:
+    $ref: audio-graph-port.yaml#/definitions/port-base
+    description:
+      Audio graph port containing endpoint nodes that connect this I2S
+      controller to external codec endpoints.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - dmas
+  - dma-names
+  - '#sound-dai-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/ma35d1-clk.h>
+    #include <dt-bindings/dma/ma35d1-dma.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    i2s0: i2s@40480000 {
+        compatible = "nuvoton,ma35d1-i2s";
+        reg = <0x40480000 0x1000>;
+
+        interrupts = <GIC_SPI 60 IRQ_TYPE_LEVEL_HIGH>;
+
+        clocks = <&clk MA35D1_CLK_I2S0>;
+        clock-names = "i2s";
+
+        dmas = <&pdma0 MA35D1_PDMA_I2S0_TX>,
+               <&pdma0 MA35D1_PDMA_I2S0_RX>;
+        dma-names = "tx", "rx";
+
+        #sound-dai-cells = <0>;
+
+        port {
+            i2s0_ep: endpoint {
+                remote-endpoint = <&codec_ep>;
+                dai-format = "i2s";
+                bitclock-master;
+                frame-master;
+                mclk-fs = <256>;
+            };
+        };
+    };
+...

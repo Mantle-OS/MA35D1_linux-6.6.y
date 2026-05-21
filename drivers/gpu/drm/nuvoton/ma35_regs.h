@@ -101,4 +101,18 @@
 #define MA35_OVERLAY_REGION_ORIGIN                0x1D00
 #define MA35_OVERLAY_REGION_SIZE                  0x1D40
 
+
+// From te 5.10 kernel
+#define MA35_GC_CHIP_ID                         0x0020
+#define MA35_GC_CHIP_REV                        0x0024
+#define MA35_GC_CHIP_DATE                       0x0028
+#define MA35_GC_CHIP_TIME	                0x002c
+#define MA35_GC_CUSTOMER_ID                     0x0030
+#define MA35_GC_PRODUCT_ID                      0x00a8
+
+// Framebuffer bits
+#define MA35_FRAMEBUFFER_OUTPUT_ENABLE  BIT(0)
+#define MA35_FRAMEBUFFER_RESET_ENABLE   BIT(4)
+#define MA35_FRAMEBUFFER_RESET_DISABLE  0
+
 #endif

@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/nuvoton,ma35d1-asoc-card.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton MA35D1 Graph-Backed ASoC Sound Card
+
+maintainers:
+  - Joseph Mills <josephjamesmills@gmail.com>
+
+description:
+  Common binding for Nuvoton MA35D1 ASoC sound cards using graph-style
+  audio topology.
+
+  The MA35D1 card binding describes the board-level sound card and points
+  to one or more CPU DAI graph ports using the dais property. Link-specific
+  properties such as dai-format, bitclock-master, frame-master, mclk-fs,
+  clock inversion, and TDM slot settings are described on graph endpoints.
+
+  Codec-specific MA35D1 card bindings should reference this schema and
+  provide their own compatible string, examples, and any profile-specific
+  restrictions.
+
+properties:
+  compatible:
+    description:
+      Codec/profile-specific MA35D1 sound card compatible.
+    enum:
+      - nuvoton,ma35d1-audio-sgtl5000
+      - nuvoton,ma35d1-audio-nau8822
+
+  label:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      User-visible sound card name.
+
+  dais:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    minItems: 1
+    description:
+      List of CPU DAI graph ports that belong to this sound card. Each
+      phandle should point to a port node under an audio DAI controller.
+      The port contains endpoint nodes connected to remote codec endpoints.
+
+  widgets:
+    $ref: /schemas/types.yaml#/definitions/non-unique-string-array
+    description:
+      A list of DAPM widgets. Each entry is a pair of strings, the first
+      being the widget type and the second being the widget name.
+
+  routing:
+    $ref: /schemas/types.yaml#/definitions/non-unique-string-array
+    description:
+      A list of audio routing connections. Each entry is a pair of strings,
+      the first being the sink and the second being the source.
+
+  hp-det-gpios:
+    maxItems: 1
+    description:
+      Optional GPIO for headphone insertion detection.
+
+  mic-det-gpios:
+    maxItems: 1
+    description:
+      Optional GPIO for microphone insertion detection.
+
+  aux-devs:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      Auxiliary devices such as external amplifiers that should be added
+      to the sound card.
+
+required:
+  - compatible
+  - label
+  - dais
+
+additionalProperties: false
+
+examples:
+  - |
+    sound {
+        compatible = "nuvoton,ma35d1-audio-sgtl5000";
+        label = "MA35D1-SGTL5000";
+
+        dais = <&i2s0_port>;
+
+        widgets =
+            "Headphone", "Headphone Jack",
+            "Microphone", "Mic Jack";
+
+        routing =
+            "Headphone Jack", "HP_OUT",
+            "MIC_IN", "Mic Jack";
+    };
+...

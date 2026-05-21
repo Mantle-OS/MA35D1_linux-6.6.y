@@ -1,22 +1,41 @@
 # SPDX-License-Identifier: GPL-2.0-only
-##
-## MA35D1 series I2S API
-##
-config SND_SOC_MA35D1
-	tristate "SoC Audio for MA35D1 series"
-	depends on ARCH_MA35D1
-	help
-	  This option enables support for I2S on the MA35D1 SoC.
 
-##
-## Boards
-##
-config SND_SOC_MA35D1EVB
-	tristate "MA35D1 I2S support for demo board"
-	depends on SND_SOC_MA35D1
-	select SND_SOC_NAU8822
+config SND_SOC_MA35D1_I2S
+	tristate "Nuvoton MA35D1 I2S controller"
+	depends on ARCH_MA35D1 || COMPILE_TEST
+	depends on COMMON_CLK
 	select SND_SOC_GENERIC_DMAENGINE_PCM
 	help
-	  Select this option to enable audio (I2S) on the
-	  MA35D1 demoboard.
+	  Say Y or M if you want support for the I2S controller found
+	  on Nuvoton MA35D1 SoCs.
 
+	  This driver provides the MA35D1 CPU DAI and registers the
+	  DMAengine PCM support used by ASoC sound cards.
+
+config SND_SOC_MA35D1_AUDIO_CARD
+	tristate "Nuvoton MA35D1 graph-backed ASoC sound card"
+	depends on SND_SOC_MA35D1_I2S
+	help
+	  Say Y or M if you want support for MA35D1 board-level ASoC
+	  sound cards using graph-style device tree endpoints.
+
+	  This driver parses the MA35D1 sound card node and connects
+	  MA35D1 I2S CPU DAIs to external codecs using graph endpoints.
+	  Codec-specific setup is handled by MA35D1 card profile files.
+
+config SND_SOC_MA35D1_AUDIO_SGTL5000
+	bool "MA35D1 SGTL5000 sound card profile"
+	depends on SND_SOC_MA35D1_AUDIO_CARD
+	select SND_SOC_SGTL5000
+	help
+	  Enable the MA35D1 sound card profile for boards using an
+	  SGTL5000 audio codec.
+
+config SND_SOC_MA35D1_AUDIO_NAU8822
+	bool "MA35D1 NAU8822 sound card profile"
+	depends on SND_SOC_MA35D1_AUDIO_CARD
+	select SND_SOC_NAU8822
+	help
+	  Enable the MA35D1 sound card profile for boards using a
+	  NAU8822 audio codec, such as the Nuvoton MA35D1 evaluation
+	  board design.

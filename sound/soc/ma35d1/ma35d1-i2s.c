@@ -1,474 +1,589 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 Nuvoton technology corporation.
+ * Copyright (c) 2026 Emac Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation;version 2 of the License.
- *
  */
 
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-#include <linux/device.h>
-#include <linux/delay.h>
-#include <linux/mutex.h>
-#include <linux/suspend.h>
-#include <sound/core.h>
-#include <sound/dmaengine_pcm.h>
-#include <sound/pcm.h>
-#include <sound/initval.h>
-#include <sound/soc.h>
-#include <sound/pcm_params.h>
-#include <sound/soc-dai.h>
-#include <linux/device.h>
+#include <linux/bitfield.h>
 #include <linux/clk.h>
+#include <linux/device.h>
+#include <linux/dmaengine.h>
+#include <linux/io.h>
+#include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_graph.h>
+#include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
+#include <linux/spinlock.h>
 
-#include "ma35d1-pcm.h"
+#include <sound/dmaengine_pcm.h>
+#include <sound/pcm_params.h>
+#include <sound/soc.h>
+#include <sound/soc-dai.h>
+
 #include "ma35d1-i2s.h"
+#include "ma35d1-i2s-regs.h"
 
-static DEFINE_MUTEX(i2s_mutex);
-struct ma35d1_i2s_info *ma35d1_i2s_data;
-EXPORT_SYMBOL(ma35d1_i2s_data);
 
-static inline void ma35d1_i2s_write_reg(struct ma35d1_i2s_info *info,
-                                        unsigned reg, unsigned val)
+static inline u32 ma35d1_i2s_read(struct ma35d1_i2s *i2s, unsigned int reg)
 {
-	__raw_writel(val, info->regs + reg);
+	return readl(i2s->regs + reg);
 }
 
-static inline unsigned ma35d1_i2s_read_reg(struct ma35d1_i2s_info *info,
-        unsigned reg)
+static inline void ma35d1_i2s_write(struct ma35d1_i2s *i2s,
+				    unsigned int reg,
+				    u32 val)
 {
-	return __raw_readl(info->regs + reg);
+	writel(val, i2s->regs + reg);
 }
+
+static inline void ma35d1_i2s_update_bits(struct ma35d1_i2s *i2s,
+					  unsigned int reg,
+					  u32 mask,
+					  u32 val)
+{
+	u32 tmp;
+
+	tmp = ma35d1_i2s_read(i2s, reg);
+	tmp &= ~mask;
+	tmp |= val & mask;
+	ma35d1_i2s_write(i2s, reg, tmp);
+}
+
+
+static void ma35d1_i2s_update_bits_locked(struct ma35d1_i2s *i2s,
+					  unsigned int reg,
+					  u32 mask,
+					  u32 val)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&i2s->lock, flags);
+	ma35d1_i2s_update_bits(i2s, reg, mask, val);
+	spin_unlock_irqrestore(&i2s->lock, flags);
+}
+
+//
+static int ma35d1_i2s_dai_probe(struct snd_soc_dai *dai);
+
+static int ma35d1_i2s_startup(struct snd_pcm_substream *substream,
+			      struct snd_soc_dai *dai);
+
+static void ma35d1_i2s_shutdown(struct snd_pcm_substream *substream,
+				struct snd_soc_dai *dai);
 
 static int ma35d1_i2s_hw_params(struct snd_pcm_substream *substream,
-                                struct snd_pcm_hw_params *params,
-                                struct snd_soc_dai *dai)
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai);
+
+static int ma35d1_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt);
+
+static int ma35d1_i2s_set_sysclk(struct snd_soc_dai *dai,
+				 int clk_id,
+				 unsigned int freq,
+				 int dir);
+
+static int ma35d1_i2s_set_bclk_ratio(struct snd_soc_dai *dai,
+				     unsigned int ratio);
+
+static int ma35d1_i2s_trigger(struct snd_pcm_substream *substream,
+			      int cmd,
+			      struct snd_soc_dai *dai);
+
+static const struct snd_soc_dai_ops ma35d1_i2s_dai_ops = {
+	.probe		= ma35d1_i2s_dai_probe,
+	.startup	= ma35d1_i2s_startup,
+	.shutdown	= ma35d1_i2s_shutdown,
+	.hw_params	= ma35d1_i2s_hw_params,
+	.set_fmt	= ma35d1_i2s_set_fmt,
+	.set_sysclk	= ma35d1_i2s_set_sysclk,
+	.set_bclk_ratio	= ma35d1_i2s_set_bclk_ratio,
+	.trigger	= ma35d1_i2s_trigger,
+};
+
+#define MA35D1_I2S_RATES	(SNDRV_PCM_RATE_8000_48000)
+#define MA35D1_I2S_FORMATS	(SNDRV_PCM_FMTBIT_S16_LE | \
+				 SNDRV_PCM_FMTBIT_S24_LE | \
+				 SNDRV_PCM_FMTBIT_S32_LE)
+
+static struct snd_soc_dai_driver ma35d1_i2s_dai = {
+	.name = "ma35d1-i2s",
+
+	.playback = {
+		.stream_name	= "Playback",
+		.channels_min	= 1,
+		.channels_max	= 2,
+		.rates		= MA35D1_I2S_RATES,
+		.formats	= MA35D1_I2S_FORMATS,
+	},
+
+	.capture = {
+		.stream_name	= "Capture",
+		.channels_min	= 1,
+		.channels_max	= 2,
+		.rates		= MA35D1_I2S_RATES,
+		.formats	= MA35D1_I2S_FORMATS,
+	},
+
+	.ops = &ma35d1_i2s_dai_ops,
+};
+
+static const struct snd_soc_component_driver ma35d1_i2s_component = {
+	.name = "ma35d1-i2s",
+};
+
+
+// ADD the rest.
+static int ma35d1_i2s_dai_probe(struct snd_soc_dai *dai)
 {
-	struct ma35d1_i2s_info *info = dev_get_drvdata(dai->dev);
-	unsigned channels = params_channels(params);
-	unsigned long val = ma35d1_i2s_read_reg(info, I2S_CTL0);
+	struct ma35d1_i2s *i2s = dev_get_drvdata(dai->dev);
 
-	//printk("Enter %s.....\n", __FUNCTION__);
+	snd_soc_dai_init_dma_data(dai,
+				&i2s->playback_dma_data,
+				&i2s->capture_dma_data);
 
-	switch (params_width(params)) {
-	case 8:
-		val = (val & ~DATWIDTH) | DATWIDTH_8;
-		val = (val & ~CHWIDTH) | CHWIDTH_8;
-		break;
-
-	case 16:
-		val = (val & ~DATWIDTH) | DATWIDTH_16;
-		val = (val & ~CHWIDTH) | CHWIDTH_16;
-		//ctl1 = AUDIO_READ(ma35d1_audio->mmio + I2S_CTL1);
-		//ctl1 = ctl1 | PBWIDTH_16;	//set Peripheral Bus Data Width to 16 bit
-		//AUDIO_WRITE(ma35d1_audio->mmio + I2S_CTL1, ctl1);
-		break;
-
-	case 24:
-		val = (val & ~DATWIDTH) | DATWIDTH_24;
-		val = (val & ~CHWIDTH) | CHWIDTH_24;
-		break;
-
-	case 32:
-		val = (val & ~DATWIDTH) | DATWIDTH_32;
-		val = (val & ~CHWIDTH) | CHWIDTH_32;
-		break;
-
-	default:
-		return -EINVAL;
-	}
-
-	/* set MONO if channel number is 1 */
-	if (channels == 1)
-		val |= MONO;
-	else
-		val &= ~MONO;
-
-	ma35d1_i2s_write_reg(info, I2S_CTL0, val);
+	snd_soc_dai_set_drvdata(dai, i2s);
 
 	return 0;
-}
-
-static int ma35d1_i2s_set_fmt(struct snd_soc_dai *cpu_dai, unsigned int fmt)
-{
-	struct ma35d1_i2s_info *info = dev_get_drvdata(cpu_dai->dev);
-	unsigned long val = ma35d1_i2s_read_reg(info, I2S_CTL0);
-
-	//printk("Enter %s.....\n", __FUNCTION__);
-
-	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
-	case SND_SOC_DAIFMT_MSB:
-		val |= ORDER; //MSB
-		break;
-	case SND_SOC_DAIFMT_I2S:
-		val &= ~ORDER; //LSB
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBM_CFM:
-		val |= SLAVE; //Slave
-		break;
-	case SND_SOC_DAIFMT_CBS_CFS:
-		val &= ~SLAVE; //Master
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	ma35d1_i2s_write_reg(info, I2S_CTL0, val);
-
-	return 0;
-}
-
-static int ma35d1_i2s_set_sysclk(struct snd_soc_dai *cpu_dai, int clk_id, unsigned int freq, int dir)
-{
-	struct ma35d1_i2s_info *info = dev_get_drvdata(cpu_dai->dev);
-	unsigned int i2s_clk, bitrate, mclkdiv, bclkdiv;
-
-	//printk("Enter %s.....\n", __FUNCTION__);
-
-	i2s_clk = clk_get_rate(info->clk);
-
-	bitrate = freq * 2U * 16U;
-	bclkdiv = ((((i2s_clk * 10UL / bitrate) >> 1U) + 5UL) / 10UL) - 1U;
-
-
-	mclkdiv = (i2s_clk / info->mclk_out) >> 1;
-
-	ma35d1_i2s_write_reg(info, I2S_CLKDIV, (bclkdiv << 8) | mclkdiv);
-
-	return 0;
-
-}
-
-static int ma35d1_i2s_trigger(struct snd_pcm_substream *substream, int cmd, struct snd_soc_dai *dai)
-{
-	struct ma35d1_i2s_info *info = dev_get_drvdata(dai->dev);
-	int ret = 0;
-	unsigned long val;
-
-	//printk("Enter %s.....\n", __FUNCTION__);
-
-	val = ma35d1_i2s_read_reg(info, I2S_CTL0);
-
-	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_START:
-	case SNDRV_PCM_TRIGGER_RESUME:
-	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		val |= I2S_EN;
-		val |= MCLKEN;
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-			val |= TX_EN | TXPDMAEN;
-		else
-			val |= RX_EN | RXPDMAEN;
-
-		ma35d1_i2s_write_reg(info, I2S_CTL0, val);
-
-		break;
-	case SNDRV_PCM_TRIGGER_STOP:
-	case SNDRV_PCM_TRIGGER_SUSPEND:
-	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		val &= ~I2S_EN;
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-			val &= ~(TX_EN | TXPDMAEN);
-		else
-			val &= ~(RX_EN | RXPDMAEN);
-
-		ma35d1_i2s_write_reg(info, I2S_CTL0, val);
-
-		break;
-	default:
-		ret = -EINVAL;
-	}
-
-	return ret;
-}
-
-static int ma35d1_i2s_probe(struct snd_soc_dai *dai)
-{
-	struct ma35d1_i2s_info *info = dev_get_drvdata(dai->dev);
-
-	//printk("Enter %s.....\n", __FUNCTION__);
-
-	mutex_lock(&i2s_mutex);
-
-	/* Init DMA data */
-	info->dma_params_rx.addr = info->phyaddr + I2S_RXFIFO;
-	info->dma_params_rx.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
-	info->pcfg_rx.reqsel = info->pdma_reqsel_rx;
-	info->dma_params_rx.peripheral_config = &info->pcfg_rx;
-	info->dma_params_rx.peripheral_size = sizeof(info->pcfg_rx);
-	info->dma_params_tx.addr = info->phyaddr + I2S_TXFIFO;
-	info->dma_params_tx.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
-	info->pcfg_tx.reqsel = info->pdma_reqsel_tx;
-	info->dma_params_tx.peripheral_config = &info->pcfg_tx;
-	info->dma_params_tx.peripheral_size = sizeof(info->pcfg_tx);
-
-	snd_soc_dai_init_dma_data(dai, &info->dma_params_tx,
-	                          &info->dma_params_rx);
-
-	snd_soc_dai_set_drvdata(dai, info);
-
-	/* Set Audio_JKEN pin */
-	info->pwdn_gpio = devm_gpiod_get_optional(dai->dev, "powerdown",
-	                  GPIOD_OUT_HIGH);
-	if (IS_ERR(info->pwdn_gpio))
-		return PTR_ERR(info->pwdn_gpio);
-
-	gpiod_set_value_cansleep(info->pwdn_gpio, 0);
-
-
-	mutex_unlock(&i2s_mutex);
-
-	return 0;
-}
-
-static int ma35d1_i2s_remove(struct snd_soc_dai *dai)
-{
-	struct ma35d1_i2s_info *info = dev_get_drvdata(dai->dev);
-
-	clk_disable(info->clk);
-
-	return 0;
-}
-
-static void ma35d1_i2s_enable(struct ma35d1_i2s_info *info, int stream)
-{
-
-	unsigned long val = ma35d1_i2s_read_reg(info, I2S_CTL0);
-
-	if ((val & I2S_EN) == 0 ) {
-		/* Enable clocks */
-		clk_prepare_enable(info->clk);
-
-		/* Enable i2s */
-		val |= I2S_EN;
-		val |= MCLKEN;
-
-		ma35d1_i2s_write_reg(info, I2S_CTL0, val);
-	}
-}
-
-static void ma35d1_i2s_disable(struct ma35d1_i2s_info *info, int stream)
-{
-	unsigned long val = ma35d1_i2s_read_reg(info, I2S_CTL0);
-
-	/* Disable i2s */
-	val &= ~I2S_EN;
-	/* Disable TX or RX */
-	if (stream == SNDRV_PCM_STREAM_PLAYBACK)
-		val &= ~(TX_EN | TXPDMAEN);
-	else
-		val &= ~(RX_EN | RXPDMAEN);
-
-	ma35d1_i2s_write_reg(info, I2S_CTL0, val);
-
-	/* Disable clocks */
-	clk_disable_unprepare(info->clk);
 }
 
 static int ma35d1_i2s_startup(struct snd_pcm_substream *substream,
-                              struct snd_soc_dai *dai)
+			      struct snd_soc_dai *dai)
 {
-	struct ma35d1_i2s_info *info = snd_soc_dai_get_drvdata(dai);
+	struct ma35d1_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+	int ret;
 
-	//printk("Enter %s.....\n", __FUNCTION__);
-
-	ma35d1_i2s_enable(info, substream->stream);
+	ret = pm_runtime_resume_and_get(i2s->dev);
+	if (ret < 0)
+		return ret;
 
 	return 0;
 }
 
 static void ma35d1_i2s_shutdown(struct snd_pcm_substream *substream,
-                                struct snd_soc_dai *dai)
+				struct snd_soc_dai *dai)
 {
-	struct ma35d1_i2s_info *info = snd_soc_dai_get_drvdata(dai);
+	struct ma35d1_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 
-	//printk("Enter %s.....\n", __FUNCTION__);
-
-	ma35d1_i2s_disable(info, substream->stream);
+	pm_runtime_put(i2s->dev);
 }
 
-static struct snd_soc_dai_ops ma35d1_i2s_dai_ops = {
-	/*
-	.trigger    = ma35d1_i2s_trigger,
-	.hw_params  = ma35d1_i2s_hw_params,
-	.set_fmt    = ma35d1_i2s_set_fmt,
-	.set_sysclk = ma35d1_i2s_set_sysclk,
-	*/
-
-	.probe          = ma35d1_i2s_probe,
-	.startup        = ma35d1_i2s_startup,
-	.shutdown       = ma35d1_i2s_shutdown,
-	.hw_params      = ma35d1_i2s_hw_params,
-	.set_sysclk     = ma35d1_i2s_set_sysclk,
-	.set_fmt        = ma35d1_i2s_set_fmt,
-	.trigger        = ma35d1_i2s_trigger,
-};
-
-struct snd_soc_dai_driver ma35d1_i2s_dai = {
-	.name		= "i2s_pcm",
-	/*
-	.probe          = ma35d1_i2s_probe,
-	.remove         = ma35d1_i2s_remove,
-	*/
-	.playback = {
-		.rates      = SNDRV_PCM_RATE_8000_48000,
-		.formats    = SNDRV_PCM_FMTBIT_S16_LE,
-		.channels_min   = 1,
-		.channels_max   = 2,
-	},
-	.capture = {
-		.rates      = SNDRV_PCM_RATE_8000_48000,
-		.formats    = SNDRV_PCM_FMTBIT_S16_LE,
-		.channels_min   = 1,
-		.channels_max   = 2,
-	},
-	.ops = &ma35d1_i2s_dai_ops,
-};
-
-static const struct snd_soc_component_driver ma35d1_i2s_component = {
-	.name       = "ma35d1-i2s",
-};
-
-
-static int ma35d1_i2s_drvprobe(struct platform_device *pdev)
+static int ma35d1_i2s_width_value(unsigned int width)
 {
-	struct ma35d1_i2s_info *info;
-	u32	val32[4], mclk_out;
-	u32	dma_tx_num, dma_rx_num;
-
-	int ret;
-
-	//printk("Enter %s.....\n", __FUNCTION__);
-
-	if (ma35d1_i2s_data)
-		return -EBUSY;
-
-	info = devm_kzalloc(&pdev->dev, sizeof(struct ma35d1_i2s_info), GFP_KERNEL);
-	if (!info)
-		return -ENOMEM;
-
-	spin_lock_init(&info->lock);
-	spin_lock_init(&info->irqlock);
-
-	if (of_property_read_u32_array(pdev->dev.of_node, "reg", val32, 4) != 0) {
-		dev_err(&pdev->dev, "can not get bank!\n");
+	switch (width) {
+	case 16:
+		return MA35D1_I2S_CTL0_DATWIDTH_16;
+	case 24:
+		return MA35D1_I2S_CTL0_DATWIDTH_24;
+	case 32:
+		return MA35D1_I2S_CTL0_DATWIDTH_32;
+	default:
 		return -EINVAL;
 	}
+}
 
-	info->phyaddr = val32[1];
+static int ma35d1_i2s_hw_params(struct snd_pcm_substream *substream,
+				struct snd_pcm_hw_params *params,
+				struct snd_soc_dai *dai)
+{
+	struct ma35d1_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+	unsigned int rate = params_rate(params);
+	unsigned int channels = params_channels(params);
+	unsigned int width = params_width(params);
+	unsigned int slot_width;
+	int width_val;
+	u32 val;
 
-	if (of_property_read_u32(pdev->dev.of_node, "pdma_reqsel_tx", &dma_tx_num) != 0) {
-		dev_err(&pdev->dev, "can not get bank!\n");
-		return -EINVAL;
-	}
+	width_val = ma35d1_i2s_width_value(width);
+	if (width_val < 0)
+		return width_val;
 
-	info->pdma_reqsel_tx = dma_tx_num;
-	pr_debug("info->pdma_reqsel_tx = 0x%lx\n", (ulong)info->pdma_reqsel_tx);
+	/*
+	 * For now, use the sample width as the slot width. If the card/profile
+	 * later sets a wider slot with TDM helpers, this can be overridden.
+	 */
+	slot_width = width;
 
-	if (of_property_read_u32(pdev->dev.of_node, "pdma_reqsel_rx", &dma_rx_num) != 0) {
-		dev_err(&pdev->dev, "can not get bank!\n");
-		return -EINVAL;
-	}
+	i2s->rate = rate;
+	i2s->channels = channels;
+	i2s->sample_width = width;
+	i2s->slot_width = slot_width;
+	i2s->bclk_rate = rate * channels * slot_width;
 
-	info->pdma_reqsel_rx = dma_rx_num;
-	pr_debug("info->pdma_reqsel_rx = 0x%lx\n", (ulong)info->pdma_reqsel_rx);
+	val = FIELD_PREP(MA35D1_I2S_CTL0_DATWIDTH, width_val) |
+	      FIELD_PREP(MA35D1_I2S_CTL0_CHWIDTH, width_val);
 
-	info->res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!info->res) {
-		dev_err(&pdev->dev, "platform_get_resource error\n");
-		ret = -ENODEV;
-		goto out1;
-	}
+	if (channels == 1)
+		val |= MA35D1_I2S_CTL0_MONO;
 
-	info->regs = devm_ioremap_resource(&pdev->dev, info->res);
-
-	info->clk = of_clk_get(pdev->dev.of_node, 0);
-	if (IS_ERR(info->clk)) {
-		dev_err(&pdev->dev, "clk_get error\n");
-		ret = PTR_ERR(info->clk);
-		goto out2;
-	}
-	clk_prepare_enable(info->clk);
-
-	info->irq_num = platform_get_irq(pdev, 0);
-	if (!info->irq_num) {
-		dev_err(&pdev->dev, "platform_get_irq error\n");
-		ret = -EBUSY;
-		goto out3;
-	}
-
-	if (of_property_read_u32(pdev->dev.of_node, "mclk_out", &mclk_out) != 0)
-		info->mclk_out = 12000000;
-	else
-		info->mclk_out = mclk_out;
-
-	ma35d1_i2s_data = info;
-
-	dev_set_drvdata(&pdev->dev, info);
-
-	ret = devm_snd_soc_register_component(&pdev->dev, &ma35d1_i2s_component,
-	                                      &ma35d1_i2s_dai, 1);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to register ASoC DAI\n");
-		goto out3;
-	}
+	ma35d1_i2s_update_bits_locked(i2s, MA35D1_I2S_CTL0,
+				       MA35D1_I2S_CTL0_DATWIDTH |
+				       MA35D1_I2S_CTL0_CHWIDTH |
+				       MA35D1_I2S_CTL0_MONO,
+				       val);
 
 	return 0;
+}
 
-out3:
-	clk_put(info->clk);
-out2:
-	iounmap(info->regs);
-	release_mem_region(info->res->start, resource_size(info->res));
-out1:
-	kfree(info);
+static int ma35d1_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
+{
+	struct ma35d1_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+	u32 mask = 0;
+	u32 val = 0;
+
+	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
+	case SND_SOC_DAIFMT_I2S:
+		/*
+		 * Preserve the vendor behavior for now: ORDER cleared for I2S.
+		 * We still need to verify the exact FORMAT/ORDER meaning from
+		 * the MA35D1 TRM before adding more formats.
+		 */
+		mask |= MA35D1_I2S_CTL0_ORDER;
+		val &= ~MA35D1_I2S_CTL0_ORDER;
+		break;
+
+	case SND_SOC_DAIFMT_MSB:
+		mask |= MA35D1_I2S_CTL0_ORDER;
+		val |= MA35D1_I2S_CTL0_ORDER;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
+	case SND_SOC_DAIFMT_CBS_CFS:
+		/* CPU provides BCLK and LRCLK. */
+		mask |= MA35D1_I2S_CTL0_SLAVE;
+		val &= ~MA35D1_I2S_CTL0_SLAVE;
+		break;
+
+	case SND_SOC_DAIFMT_CBM_CFM:
+		/* Codec provides BCLK and LRCLK. */
+		mask |= MA35D1_I2S_CTL0_SLAVE;
+		val |= MA35D1_I2S_CTL0_SLAVE;
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	/*
+	 * The old vendor driver ignored clock inversion. Keep that unsupported
+	 * for now rather than silently lying.
+	 */
+	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
+	case SND_SOC_DAIFMT_NB_NF:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	i2s->fmt = fmt;
+
+	ma35d1_i2s_update_bits_locked(i2s, MA35D1_I2S_CTL0, mask, val);
+
+	return 0;
+}
+
+static int ma35d1_i2s_program_dividers(struct ma35d1_i2s *i2s)
+{
+	unsigned long parent_rate;
+	unsigned int bclk_rate;
+	unsigned int mclk_rate;
+	u32 bclkdiv;
+	u32 mclkdiv;
+	u32 val;
+
+	parent_rate = clk_get_rate(i2s->clk);
+	if (!parent_rate)
+		return -EINVAL;
+
+	bclk_rate = i2s->bclk_rate;
+	mclk_rate = i2s->mclk_rate;
+
+	if (!bclk_rate)
+		return 0;
+
+	/*
+	 * Divider formula needs TRM verification.
+	 *
+	 * Vendor code used:
+	 *     bclkdiv = round((parent / bclk) / 2) - 1
+	 *     mclkdiv = (parent / mclk) >> 1
+	 *
+	 * Keep the same broad formula for first bring-up, but program the
+	 * fields by mask so BCLKDIV and MCLKDIV cannot be accidentally swapped.
+	 */
+	bclkdiv = DIV_ROUND_CLOSEST(parent_rate, bclk_rate * 2) - 1;
+
+	if (mclk_rate)
+		mclkdiv = DIV_ROUND_CLOSEST(parent_rate, mclk_rate * 2) - 1;
+	else
+		mclkdiv = 0;
+
+	if (bclkdiv > FIELD_MAX(MA35D1_I2S_CLKDIV_BCLKDIV))
+		return -EINVAL;
+
+	if (mclkdiv > FIELD_MAX(MA35D1_I2S_CLKDIV_MCLKDIV))
+		return -EINVAL;
+
+	val = FIELD_PREP(MA35D1_I2S_CLKDIV_BCLKDIV, bclkdiv) |
+	      FIELD_PREP(MA35D1_I2S_CLKDIV_MCLKDIV, mclkdiv);
+
+	ma35d1_i2s_write(i2s, MA35D1_I2S_CLKDIV, val);
+
+	return 0;
+}
+
+static int ma35d1_i2s_set_sysclk(struct snd_soc_dai *dai,
+				 int clk_id,
+				 unsigned int freq,
+				 int dir)
+{
+	struct ma35d1_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+
+	if (dir != SND_SOC_CLOCK_OUT && dir != SND_SOC_CLOCK_IN)
+		return -EINVAL;
+
+	/*
+	 * For CPU-master operation, this is the generated or requested MCLK.
+	 * For CPU-slave operation, this may describe the incoming clock rate.
+	 */
+	i2s->mclk_rate = freq;
+
+	return ma35d1_i2s_program_dividers(i2s);
+}
+
+static int ma35d1_i2s_set_bclk_ratio(struct snd_soc_dai *dai,
+				     unsigned int ratio)
+{
+	struct ma35d1_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+
+	if (!i2s->rate)
+		return -EINVAL;
+
+	i2s->bclk_rate = i2s->rate * ratio;
+
+	return ma35d1_i2s_program_dividers(i2s);
+}
+
+static int ma35d1_i2s_trigger(struct snd_pcm_substream *substream,
+			      int cmd,
+			      struct snd_soc_dai *dai)
+{
+	struct ma35d1_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+	bool playback = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
+	unsigned long flags;
+	u32 mask;
+	u32 val;
+	int ret = 0;
+
+	spin_lock_irqsave(&i2s->lock, flags);
+
+	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_START:
+	case SNDRV_PCM_TRIGGER_RESUME:
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		mask = MA35D1_I2S_CTL0_I2S_EN |
+		       MA35D1_I2S_CTL0_MCLKEN;
+
+		val = MA35D1_I2S_CTL0_I2S_EN |
+		      MA35D1_I2S_CTL0_MCLKEN;
+
+		if (playback) {
+			mask |= MA35D1_I2S_CTL0_TX_EN |
+				MA35D1_I2S_CTL0_TXPDMAEN;
+			val |= MA35D1_I2S_CTL0_TX_EN |
+			       MA35D1_I2S_CTL0_TXPDMAEN;
+			i2s->playback_active = true;
+		} else {
+			mask |= MA35D1_I2S_CTL0_RX_EN |
+				MA35D1_I2S_CTL0_RXPDMAEN;
+			val |= MA35D1_I2S_CTL0_RX_EN |
+			       MA35D1_I2S_CTL0_RXPDMAEN;
+			i2s->capture_active = true;
+		}
+
+		ma35d1_i2s_update_bits(i2s, MA35D1_I2S_CTL0, mask, val);
+		break;
+
+	case SNDRV_PCM_TRIGGER_STOP:
+	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		if (playback) {
+			i2s->playback_active = false;
+			mask = MA35D1_I2S_CTL0_TX_EN |
+			       MA35D1_I2S_CTL0_TXPDMAEN;
+		} else {
+			i2s->capture_active = false;
+			mask = MA35D1_I2S_CTL0_RX_EN |
+			       MA35D1_I2S_CTL0_RXPDMAEN;
+		}
+
+		val = 0;
+
+		if (!i2s->playback_active && !i2s->capture_active)
+			mask |= MA35D1_I2S_CTL0_I2S_EN |
+				MA35D1_I2S_CTL0_MCLKEN;
+
+		ma35d1_i2s_update_bits(i2s, MA35D1_I2S_CTL0, mask, val);
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	spin_unlock_irqrestore(&i2s->lock, flags);
 
 	return ret;
 }
 
-static const struct of_device_id ma35d1_audio_i2s_of_match[] = {
-	{   .compatible = "nuvoton,ma35d1-audio-i2s"    },
-	{   },
-};
-MODULE_DEVICE_TABLE(of, ma35d1_audio_i2s_of_match);
+// *********************************
+// PLATFORM SIDE
+// *********************************
 
-static int ma35d1_i2s_drvremove(struct platform_device *pdev)
+static int ma35d1_i2s_setup_dma(struct platform_device *pdev,
+				struct ma35d1_i2s *i2s)
 {
-	snd_soc_unregister_component(&pdev->dev);
+	u32 tx_reqsel;
+	u32 rx_reqsel;
+	int ret;
 
-	clk_put(ma35d1_i2s_data->clk);
-	iounmap(ma35d1_i2s_data->regs);
-	release_mem_region(ma35d1_i2s_data->res->start, resource_size(ma35d1_i2s_data->res));
+	ret = device_property_read_u32(&pdev->dev, "nuvoton,tx-dma-reqsel",
+				       &tx_reqsel);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "missing nuvoton,tx-dma-reqsel\n");
 
-	kfree(ma35d1_i2s_data);
-	ma35d1_i2s_data = NULL;
+	ret = device_property_read_u32(&pdev->dev, "nuvoton,rx-dma-reqsel",
+				       &rx_reqsel);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "missing nuvoton,rx-dma-reqsel\n");
+
+	i2s->playback_pcfg.reqsel = tx_reqsel;
+	i2s->capture_pcfg.reqsel = rx_reqsel;
+
+	i2s->playback_dma_data.addr = i2s->phys_base + MA35D1_I2S_TXFIFO;
+	i2s->playback_dma_data.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	i2s->playback_dma_data.peripheral_config = &i2s->playback_pcfg;
+	i2s->playback_dma_data.peripheral_size = sizeof(i2s->playback_pcfg);
+
+	i2s->capture_dma_data.addr = i2s->phys_base + MA35D1_I2S_RXFIFO;
+	i2s->capture_dma_data.addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+	i2s->capture_dma_data.peripheral_config = &i2s->capture_pcfg;
+	i2s->capture_dma_data.peripheral_size = sizeof(i2s->capture_pcfg);
 
 	return 0;
 }
 
+static int ma35d1_i2s_runtime_suspend(struct device *dev)
+{
+	struct ma35d1_i2s *i2s = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(i2s->clk);
+
+	return 0;
+}
+
+static int ma35d1_i2s_runtime_resume(struct device *dev)
+{
+	struct ma35d1_i2s *i2s = dev_get_drvdata(dev);
+
+	return clk_prepare_enable(i2s->clk);
+}
+
+static const struct dev_pm_ops ma35d1_i2s_pm_ops = {
+	RUNTIME_PM_OPS(ma35d1_i2s_runtime_suspend,
+		       ma35d1_i2s_runtime_resume,
+		       NULL)
+};
+
+static int ma35d1_i2s_drvprobe(struct platform_device *pdev)
+{
+	struct ma35d1_i2s *i2s;
+	struct resource *res;
+	int ret;
+
+	i2s = devm_kzalloc(&pdev->dev, sizeof(*i2s), GFP_KERNEL);
+	if (!i2s)
+		return -ENOMEM;
+
+	i2s->dev = &pdev->dev;
+	spin_lock_init(&i2s->lock);
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res)
+		return dev_err_probe(&pdev->dev, -ENODEV,
+					"missing memory resource\n");
+
+	i2s->phys_base = res->start;
+
+	i2s->regs = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(i2s->regs))
+		return PTR_ERR(i2s->regs);
+
+	i2s->clk = devm_clk_get(&pdev->dev, "i2s");
+	if (IS_ERR(i2s->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(i2s->clk),
+					"failed to get i2s clock\n");
+
+	platform_set_drvdata(pdev, i2s);
+
+	ret = ma35d1_i2s_setup_dma(pdev, i2s);
+	if (ret)
+		return ret;
+
+	pm_runtime_enable(&pdev->dev);
+
+	ret = devm_snd_soc_register_component(&pdev->dev,
+					&ma35d1_i2s_component,
+					&ma35d1_i2s_dai, 1);
+	if (ret)
+		goto err_pm_disable;
+
+	ret = devm_ma35d1_pcm_register(&pdev->dev);
+	if (ret)
+		goto err_pm_disable;
+
+	return 0;
+
+err_pm_disable:
+	pm_runtime_disable(&pdev->dev);
+
+	return ret;
+}
+
+static int ma35d1_i2s_drvremove(struct platform_device *pdev)
+{
+	pm_runtime_disable(&pdev->dev);
+
+	return 0;
+}
+
+static const struct of_device_id ma35d1_i2s_of_match[] = {
+	{ .compatible = "nuvoton,ma35d1-i2s" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, ma35d1_i2s_of_match);
+
 static struct platform_driver ma35d1_i2s_driver = {
 	.driver = {
-		.name   = "ma35d1-audio-i2s",
-		.owner  = THIS_MODULE,
-		.of_match_table = of_match_ptr(ma35d1_audio_i2s_of_match),
+		.name = "ma35d1-i2s",
+		.of_match_table = ma35d1_i2s_of_match,
+		.pm = pm_ptr(&ma35d1_i2s_pm_ops),
 	},
-	.probe      = ma35d1_i2s_drvprobe,
-	.remove     = ma35d1_i2s_drvremove,
+	.probe = ma35d1_i2s_drvprobe,
+	.remove = ma35d1_i2s_drvremove,
 };
 
 module_platform_driver(ma35d1_i2s_driver);
 
-MODULE_DESCRIPTION("MA35D1 IIS SoC driver!");
+MODULE_DESCRIPTION("MA35D1 IIS SoC driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:ma35d1-i2s");
-

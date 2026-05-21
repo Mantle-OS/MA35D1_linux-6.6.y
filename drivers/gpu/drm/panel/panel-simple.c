@@ -4139,6 +4139,34 @@ static const struct panel_desc arm_rtsm = {
 	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
 };
 
+static const struct drm_display_mode fema_gm800480d_70_mode = {
+	.clock = 33264,
+	.hdisplay = 800,
+	.hsync_start = 800 + 40,
+	.hsync_end = 800 + 40 + 128,
+	.htotal = 1056,
+	.vdisplay = 480,
+	.vsync_start = 480 + 13,
+	.vsync_end = 480 + 13 + 2,
+	.vtotal = 525,
+	.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
+};
+
+static const struct panel_desc fema_gm800480d_70 = {
+	.modes = &fema_gm800480d_70_mode,
+	.num_modes = 1,
+	.bpc = 6,
+	.size = {
+		.width = 152,
+		.height = 91,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB666_1X7X3_SPWG,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH,
+	// | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE,
+	.connector_type = DRM_MODE_CONNECTOR_LVDS,
+};
+
+
 static const struct of_device_id platform_of_match[] = {
 	{
 		.compatible = "ampire,am-1280800n3tzqw-t00h",
@@ -4551,6 +4579,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "microchip,ac69t88a",
 		.data = &mchp_ac69t88a,
+	}, {
+		.compatible = "fema,gm800480d-70",
+		.data = &fema_gm800480d_70,
 	}, {
 		/* Must be the last entry */
 		.compatible = "panel-dpi",

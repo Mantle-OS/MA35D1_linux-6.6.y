@@ -18,6 +18,7 @@
 #include <linux/regmap.h>
 #include <linux/types.h>
 #include <linux/pm_runtime.h>
+#include <linux/io.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
@@ -42,8 +43,9 @@ static int ma35_drm_gem_dma_dumb_create(struct drm_file *file_priv,
 	u32 pixel_align;
 
 	if (args->width < mode_config->min_width ||
-		args->height < mode_config->min_height)
+		args->height < mode_config->min_height) {
 		return -EINVAL;
+	}
 
 	// check for alignment
 	pixel_align = MA35_DISPLAY_ALIGN_PIXELS * args->bpp / 8;
@@ -52,14 +54,15 @@ static int ma35_drm_gem_dma_dumb_create(struct drm_file *file_priv,
 	return drm_gem_dma_dumb_create_internal(file_priv, drm_dev, args);
 }
 
-static __maybe_unused void ma35_fbdev_backup_memory(struct ma35_drm *priv, struct resource *res)
+static __maybe_unused void ma35_fbdev_backup_memory(struct ma35_drm *priv,
+							struct resource *res)
 {
 	regmap_write(priv->regmap, MA35_FRAMEBUFFER_ADDRESS, res->start);
 }
 
 static struct drm_driver ma35_drm_driver = {
 	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC |
-						  DRIVER_CURSOR_HOTSPOT, // this create offset property
+					DRIVER_CURSOR_HOTSPOT, // this create offset property
 
 	.fops				= &ma35_drm_fops,
 	.name				= "ma35-drm",
@@ -75,18 +78,21 @@ static struct regmap_config ma35_drm_regmap_config = {
 	.reg_bits	= 32,
 	.val_bits	= 32,
 	.reg_stride	= 4,
-	.max_register = 0x2000,
+	.max_register 	= 0x2000,
 	.name		= "ma35-drm",
 };
 
 static irqreturn_t ma35_drm_irq_handler(int irq, void *data)
 {
 	struct ma35_drm *priv = data;
+	struct drm_device *drm_dev = &priv->drm_dev;
 	irqreturn_t ret = IRQ_NONE;
 	u32 stat = 0;
 
-	/* Get pending interrupt sources(RO). */
+	/* Get pending interrupt sources (RO). */
 	regmap_read(priv->regmap, MA35_INT_STATE, &stat);
+
+	// drm_info(drm_dev, "IRQ: MA35_INT_STATE=0x%08x\n", stat);
 
 	if (stat & MA35_INT_STATE_DISP0) {
 		ma35_crtc_vblank_handler(priv);
@@ -102,8 +108,32 @@ static const struct drm_mode_config_funcs ma35_mode_config_funcs = {
 	.atomic_commit		= drm_atomic_helper_commit,
 };
 
+static void ma35_drm_atomic_commit_tail(struct drm_atomic_state *state)
+{
+	struct drm_device *drm_dev = state->dev;
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: disables\n");
+	drm_atomic_helper_commit_modeset_disables(drm_dev, state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: enables\n");
+	drm_atomic_helper_commit_modeset_enables(drm_dev, state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: planes\n");
+	drm_atomic_helper_commit_planes(drm_dev, state,
+					DRM_PLANE_COMMIT_ACTIVE_ONLY);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: hw_done\n");
+	drm_atomic_helper_commit_hw_done(state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: wait_for_vblanks\n");
+	drm_atomic_helper_wait_for_vblanks(drm_dev, state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: cleanup_planes\n");
+	drm_atomic_helper_cleanup_planes(drm_dev, state);
+}
+
 static const struct drm_mode_config_helper_funcs ma35_mode_config_helper_funcs = {
-	.atomic_commit_tail = drm_atomic_helper_commit_tail,
+	.atomic_commit_tail = ma35_drm_atomic_commit_tail,
 };
 
 static int ma35_mode_init(struct ma35_drm *priv)
@@ -124,7 +154,7 @@ static int ma35_mode_init(struct ma35_drm *priv)
 		drm_err(drm_dev, "Failed to initialize vblank\n");
 		return ret;
 	}
-
+	// TODO Revisit this
 	mode_config->min_width = 32;
 	mode_config->max_width = 1920;
 	mode_config->min_height = 1;
@@ -141,7 +171,6 @@ static int ma35_mode_init(struct ma35_drm *priv)
 static void ma35_mode_fini(struct ma35_drm *priv)
 {
 	struct drm_device *drm_dev = &priv->drm_dev;
-
 	drm_kms_helper_poll_fini(drm_dev);
 }
 
@@ -181,27 +210,41 @@ static int ma35_clocks_prepare(struct ma35_drm *priv)
 
 	priv->dcuclk = devm_clk_get(dev, "dcu_gate");
 	if (IS_ERR(priv->dcuclk)) {
-		dev_err(dev, "Failed to get display core clock\n");
+		dev_err(dev, "Failed to get display core clock dcu_gate\n");
 		return PTR_ERR(priv->dcuclk);
 	}
 
 	ret = clk_prepare_enable(priv->dcuclk);
 	if (ret) {
-		dev_err(dev, "Failed to enable display core clock\n");
+		dev_err(dev, "Failed to enable display core clock dcuclk\n");
 		return ret;
 	}
+
+	// dev_info(dev, "dcu_clk = epll/2 = %ld Hz\n", clk_get_rate(priv->dcuclk));
 
 	priv->dcupclk = devm_clk_get(dev, "dcup_div");
 	if (IS_ERR(priv->dcupclk)) {
-		dev_err(dev, "Failed to get display pixel clock\n");
+		dev_err(dev, "Failed to get display pixel clock dcup_div\n");
 		return PTR_ERR(priv->dcupclk);
 	}
 
+	// dev_info(dev,
+	// 	"dcuclk rate: %lu Hz\n",
+	// 	clk_get_rate(priv->dcuclk));
+ //
+	// dev_info(dev,
+	// 	"dcupclk rate before enable: %lu Hz\n",
+	// 	clk_get_rate(priv->dcupclk));
+
 	ret = clk_prepare_enable(priv->dcupclk);
 	if (ret) {
-		dev_err(dev, "Failed to enable display pixel clock\n");
+		dev_err(dev, "Failed to enable display pixel clock dcupclk\n");
 		return ret;
 	}
+
+	// dev_info(dev,
+	// 	"dcupclk rate after enable: %lu Hz\n",
+	// 	clk_get_rate(priv->dcupclk));
 
 	return 0;
 }
@@ -215,15 +258,86 @@ static int ma35_clocks_unprepare(struct ma35_drm *priv)
 	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(clocks); i++) {
-		if (!*clocks[i])
+		if (!*clocks[i]){
 			continue;
-
+		}
 		clk_disable_unprepare(*clocks[i]);
 		*clocks[i] = NULL;
 	}
 
 	return 0;
 }
+
+static int ma35_reset_deassert(struct ma35_drm *priv)
+{
+	struct drm_device *drm_dev = &priv->drm_dev;
+	struct device *dev = drm_dev->dev;
+	int ret;
+
+	priv->reset = devm_reset_control_get_optional_exclusive(dev, NULL);
+	if (IS_ERR(priv->reset)) {
+		ret = PTR_ERR(priv->reset);
+		drm_err(drm_dev, "Failed to get display reset: %d\n", ret);
+		return ret;
+	}
+
+	if (!priv->reset) {
+		drm_info(drm_dev, "No display reset control found\n");
+		return 0;
+	}
+
+	// drm_info(drm_dev, "Asserting display reset\n");
+
+	ret = reset_control_assert(priv->reset);
+	if (ret) {
+		drm_err(drm_dev, "Failed to assert display reset: %d\n", ret);
+		return ret;
+	}
+
+	udelay(100);
+
+	// drm_info(drm_dev, "Deasserting display reset\n");
+
+	ret = reset_control_deassert(priv->reset);
+	if (ret) {
+		drm_err(drm_dev, "Failed to deassert display reset: %d\n", ret);
+		return ret;
+	}
+
+	udelay(10);
+
+	// drm_info(drm_dev, "Display reset pulse complete\n");
+
+	return 0;
+}
+
+
+static void ma35_drm_apply_software_reset(struct ma35_drm *priv,
+					void __iomem *base)
+{
+	struct drm_device *drm_dev = &priv->drm_dev;
+
+	// drm_info(drm_dev,
+	// 	"Applying display framebuffer-config software reset\n");
+
+	writel(MA35_FRAMEBUFFER_RESET_ENABLE,
+		base + MA35_FRAMEBUFFER_CONFIG);
+
+	udelay(10);
+
+	writel(MA35_FRAMEBUFFER_RESET_DISABLE,
+		base + MA35_FRAMEBUFFER_CONFIG);
+
+	// drm_info(drm_dev,
+	// 	"RAW MMIO after framebuffer software reset: 0000=%08x 0004=%08x 0020=%08x 00a8=%08x 1518=%08x 1418=%08x\n",
+	// 	readl(base + 0x0000),
+	// 	readl(base + 0x0004),
+	// 	readl(base + 0x0020),
+	// 	readl(base + 0x00a8),
+	// 	readl(base + MA35_FRAMEBUFFER_CONFIG),
+	// 	readl(base + MA35_PANEL_CONFIG));
+}
+
 
 static int ma35_drm_probe(struct platform_device *pdev)
 {
@@ -249,7 +363,7 @@ static int ma35_drm_probe(struct platform_device *pdev)
 			return ret;
 		}
 		of_node_put(mem_node);
-		dev_info(dev, "registering reserved memory %pR\n", &res);
+		// dev_info(dev, "registering reserved memory %pR\n", &res);
 
 		/* This function assigns respective DMA-mapping operations
 		 * to the device, so that it can use the reserved memory region
@@ -269,6 +383,7 @@ static int ma35_drm_probe(struct platform_device *pdev)
 		ret = PTR_ERR(base);
 		goto error_reserved_mem;
 	}
+
 	regmap = devm_regmap_init_mmio(dev, base, &ma35_drm_regmap_config);
 	if (IS_ERR(regmap)) {
 		dev_err(dev, "Failed to create regmap for I/O\n");
@@ -300,8 +415,18 @@ static int ma35_drm_probe(struct platform_device *pdev)
 		goto error_reserved_mem;
 	}
 
+	// NEW add reset controller
+	ret = ma35_reset_deassert(priv);
+	if (ret) {
+		drm_err(drm_dev, "Failed to deassert display reset: %d\n", ret);
+		goto error_clocks;
+	}
+
+	// NEW software reset
+	ma35_drm_apply_software_reset(priv, base);
+
 	ret = devm_request_irq(dev, irq, ma35_drm_irq_handler, 0,
-			       dev_name(dev), priv);
+				dev_name(dev), priv);
 	if (ret) {
 		drm_err(drm_dev, "Failed to request IRQ\n");
 		goto error_clocks;
@@ -337,8 +462,9 @@ static int ma35_drm_probe(struct platform_device *pdev)
 	// interface
 	ret = ma35_interface_init(priv);
 	if (ret) {
-		if (ret != -EPROBE_DEFER)
+		if (ret != -EPROBE_DEFER){
 			drm_err(drm_dev, "Failed to initialize interface\n");
+		}
 
 		goto error_clocks;
 	}
@@ -367,8 +493,7 @@ static int ma35_drm_probe(struct platform_device *pdev)
 		drm_fbdev_generic_setup(drm_dev, preferred_bpp);
 		ma35_fbdev_backup_memory(priv, &res);
 	} else {
-		dev_dbg(dev,
-			"Reserved memory node not present. Driver will try dynamic allocation\n");
+		dev_dbg(dev, "Reserved memory node not present. Driver will try dynamic allocation\n");
 	}
 #endif
 
@@ -480,23 +605,33 @@ static const struct of_device_id ma35_drm_of_table[] = {
 MODULE_DEVICE_TABLE(of, ma35_drm_of_table);
 
 static const struct dev_pm_ops ma35_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(ma35_drm_suspend, ma35_drm_resume)
+	SET_SYSTEM_SLEEP_PM_OPS(ma35_drm_suspend,
+				ma35_drm_resume)
+
 	SET_RUNTIME_PM_OPS(ma35_drm_runtime_suspend,
-			   ma35_drm_runtime_resume, NULL)
+				ma35_drm_runtime_resume,
+				NULL)
 };
 
 static struct platform_driver ma35_drm_platform_driver = {
 	.probe		= ma35_drm_probe,
-	.remove_new		= ma35_drm_remove,
+	.remove_new	= ma35_drm_remove,
 	.shutdown	= ma35_drm_shutdown,
 	.driver		= {
 		.name		= "ma35-drm",
 		.of_match_table	= ma35_drm_of_table,
-		.pm = &ma35_pm_ops,
+		.pm 		= &ma35_pm_ops,
 	},
 };
 
-module_platform_driver(ma35_drm_platform_driver);
+/* remove the platform call and use late_initcall */
+// module_platform_driver(ma35_drm_platform_driver);
+static int __init ma35_drm_init(void) {
+	return platform_driver_register(&ma35_drm_platform_driver);
+}
+
+/* late_initcall "ensures" almost everything else (I2C, Regulators) is ready first kinda */
+late_initcall(ma35_drm_init);
 
 MODULE_AUTHOR("Joey Lu <yclu4@nuvoton.com>");
 MODULE_DESCRIPTION("Nuvoton MA35 series DRM driver");
