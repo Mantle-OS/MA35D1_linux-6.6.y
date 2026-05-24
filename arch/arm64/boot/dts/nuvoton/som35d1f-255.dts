@@ -81,8 +81,8 @@
 		startup-delay-us = <70000>;
 		gpio = <&gpio_expander 9 GPIO_ACTIVE_HIGH>;  // Issue this expanger lives on i2c which comes up after DRM
 		// enable-active-high;
-		regulator-always-on; // hack to test the regulators
-		regulator-boot-on;   // hack to test the regulators
+		regulator-always-on;
+		regulator-boot-on;
 		status = "okay";
 	};
 
@@ -410,14 +410,10 @@
 
 &i2s0 {
 	status = "okay";
-	nuvoton,tx-dma-reqsel = <86>;
-	nuvoton,rx-dma-reqsel = <87>;
-
 	// interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
 	// clocks = <&clk I2S0_GATE>;
 	// resets = <&reset MA35D1_RESET_I2S0>;
-	// pdma_reqsel_tx = <86>;
-	// pdma_reqsel_rx = <87>;
+
 
 	i2s0_port: port {
 		i2s0_ep: endpoint {
@@ -426,8 +422,12 @@
 			dai-format = "i2s";
 			bitclock-master;
 			frame-master;
-			 //  48000 * 256 = 12.288 MHz
+			//  48000 * 256 = 12.288 MHz
+
+			// TODO clean this up after testing.
 			mclk-fs = <256>;
+			system-clock-frequency = <12288000>;
+			system-clock-direction-out;
 		};
 	};
 };

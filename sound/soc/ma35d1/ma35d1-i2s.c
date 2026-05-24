@@ -66,6 +66,70 @@ static void ma35d1_i2s_update_bits_locked(struct ma35d1_i2s *i2s,
 	spin_unlock_irqrestore(&i2s->lock, flags);
 }
 
+
+static int ma35d1_i2s_parse_endpoint_clock(struct platform_device *pdev,
+					   struct ma35d1_i2s *i2s)
+{
+	struct device_node *ep;
+	u32 rate;
+	int ret = 0;
+
+	ep = of_graph_get_next_endpoint(pdev->dev.of_node, NULL);
+	if (!ep)
+		return 0;
+
+	if (!of_property_read_bool(ep, "system-clock-direction-out"))
+		goto out_put;
+
+	ret = of_property_read_u32(ep, "system-clock-frequency", &rate);
+	if (ret) {
+		ret = dev_err_probe(&pdev->dev, ret,
+				"system-clock-direction-out requires system-clock-frequency\n");
+		goto out_put;
+	}
+
+	i2s->early_mclk_rate = rate;
+	i2s->mclk_rate = rate;
+	i2s->keep_mclk = true;
+
+	dev_info(&pdev->dev, "enabling early MCLK at %u Hz\n", rate);
+
+out_put:
+	of_node_put(ep);
+	return ret;
+}
+
+static int ma35d1_i2s_program_mclk(struct ma35d1_i2s *i2s)
+{
+	unsigned long parent_rate;
+	u32 mclkdiv;
+	u32 val;
+
+	if (!i2s->mclk_rate) {
+		return 0;
+	}
+
+	parent_rate = clk_get_rate(i2s->clk);
+	if (!parent_rate) {
+		return -EINVAL;
+	}
+	mclkdiv = DIV_ROUND_CLOSEST(parent_rate, i2s->mclk_rate * 2) - 1;
+
+	if (mclkdiv > FIELD_MAX(MA35D1_I2S_CLKDIV_MCLKDIV)) {
+		return -EINVAL;
+	}
+
+	val = FIELD_PREP(MA35D1_I2S_CLKDIV_MCLKDIV, mclkdiv);
+
+	ma35d1_i2s_update_bits(i2s,
+				MA35D1_I2S_CLKDIV,
+				MA35D1_I2S_CLKDIV_MCLKDIV,
+				val);
+
+	return 0;
+}
+
+
 //
 static int ma35d1_i2s_dai_probe(struct snd_soc_dai *dai);
 
@@ -299,8 +363,9 @@ static int ma35d1_i2s_program_dividers(struct ma35d1_i2s *i2s)
 	u32 val;
 
 	parent_rate = clk_get_rate(i2s->clk);
-	if (!parent_rate)
+	if (!parent_rate) {
 		return -EINVAL;
+	}
 
 	bclk_rate = i2s->bclk_rate;
 	mclk_rate = i2s->mclk_rate;
@@ -416,17 +481,27 @@ static int ma35d1_i2s_trigger(struct snd_pcm_substream *substream,
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		if (playback) {
 			i2s->playback_active = false;
+
 			mask = MA35D1_I2S_CTL0_TX_EN |
 			       MA35D1_I2S_CTL0_TXPDMAEN;
 		} else {
 			i2s->capture_active = false;
+
 			mask = MA35D1_I2S_CTL0_RX_EN |
 			       MA35D1_I2S_CTL0_RXPDMAEN;
 		}
 
 		val = 0;
 
-		if (!i2s->playback_active && !i2s->capture_active)
+		/*
+		 * Only shut down the global I2S block and MCLK when both
+		 * streams are inactive.
+		 *
+		 * If keep_mclk is set, leave I2S_EN/MCLKEN enabled so codecs
+		 * such as SGTL5000 keep their probe/runtime SYS_MCLK.
+		 */
+		if (!i2s->playback_active && !i2s->capture_active &&
+		    !i2s->keep_mclk)
 			mask |= MA35D1_I2S_CTL0_I2S_EN |
 				MA35D1_I2S_CTL0_MCLKEN;
 
@@ -541,6 +616,30 @@ static int ma35d1_i2s_drvprobe(struct platform_device *pdev)
 
 	pm_runtime_enable(&pdev->dev);
 
+
+	ret = ma35d1_i2s_parse_endpoint_clock(pdev, i2s);
+	if (ret) {
+		goto err_pm_disable;
+	}
+
+	if (i2s->keep_mclk) {
+		ret = pm_runtime_resume_and_get(&pdev->dev);
+		if (ret < 0) {
+			goto err_pm_disable;
+		}
+		ret = ma35d1_i2s_program_mclk(i2s);
+
+		if (ret) {
+			goto err_pm_put;
+		}
+		ma35d1_i2s_update_bits(i2s,
+				MA35D1_I2S_CTL0,
+				MA35D1_I2S_CTL0_I2S_EN |
+				MA35D1_I2S_CTL0_MCLKEN,
+				MA35D1_I2S_CTL0_I2S_EN |
+				MA35D1_I2S_CTL0_MCLKEN);
+	}
+
 	ret = devm_snd_soc_register_component(&pdev->dev,
 					&ma35d1_i2s_component,
 					&ma35d1_i2s_dai, 1);
@@ -553,14 +652,27 @@ static int ma35d1_i2s_drvprobe(struct platform_device *pdev)
 
 	return 0;
 
+err_pm_put:
+	if (i2s->keep_mclk)
+		pm_runtime_put_sync(&pdev->dev);
 err_pm_disable:
 	pm_runtime_disable(&pdev->dev);
-
 	return ret;
 }
 
 static int ma35d1_i2s_drvremove(struct platform_device *pdev)
 {
+	struct ma35d1_i2s *i2s = platform_get_drvdata(pdev);
+
+	if (i2s->keep_mclk) {
+		ma35d1_i2s_update_bits(i2s,
+				MA35D1_I2S_CTL0,
+				MA35D1_I2S_CTL0_I2S_EN |
+				MA35D1_I2S_CTL0_MCLKEN,
+				0);
+		pm_runtime_put_sync(&pdev->dev);
+	}
+
 	pm_runtime_disable(&pdev->dev);
 
 	return 0;

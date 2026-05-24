@@ -39,9 +39,12 @@ struct ma35d1_i2s {
 	unsigned int slot_width;
 	unsigned int mclk_rate;
 	unsigned int bclk_rate;
+	unsigned int early_mclk_rate;
+
 
 	bool playback_active;
 	bool capture_active;
+	bool keep_mclk;
 };
 
 int devm_ma35d1_pcm_register(struct device *dev);
