@@ -16,8 +16,6 @@
  https://github.com/OpenNuvoton/MA35D1_linux-6.6.y/blob/master/arch/arm64/boot/dts/nuvoton/ma35d1.dtsi#L1733
 */
 /delete-node/ &panel;
-/delete-node/ &sound;
-/delete-node/ &i2s_pcm;
 
 / {
 	model = "EMAC SOM-35D1F with SOM-255";
