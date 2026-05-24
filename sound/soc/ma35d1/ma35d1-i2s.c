@@ -581,52 +581,65 @@ static const struct dev_pm_ops ma35d1_i2s_pm_ops = {
 
 static int ma35d1_i2s_drvprobe(struct platform_device *pdev)
 {
+	dev_info(&pdev->dev, "MA35D1 I2S probe start\n");
+
 	struct ma35d1_i2s *i2s;
 	struct resource *res;
 	int ret;
 
 	i2s = devm_kzalloc(&pdev->dev, sizeof(*i2s), GFP_KERNEL);
-	if (!i2s)
+	if (!i2s) {
 		return -ENOMEM;
+	}
+
 
 	i2s->dev = &pdev->dev;
 	spin_lock_init(&i2s->lock);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return dev_err_probe(&pdev->dev, -ENODEV,
-					"missing memory resource\n");
-
+	if (!res) {
+		return dev_err_probe(&pdev->dev,
+				-ENODEV,
+				"missing memory resource\n");
+	}
 	i2s->phys_base = res->start;
 
 	i2s->regs = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(i2s->regs))
+	if (IS_ERR(i2s->regs)) {
 		return PTR_ERR(i2s->regs);
+	}
 
 	i2s->clk = devm_clk_get(&pdev->dev, "i2s");
-	if (IS_ERR(i2s->clk))
-		return dev_err_probe(&pdev->dev, PTR_ERR(i2s->clk),
-					"failed to get i2s clock\n");
+	if (IS_ERR(i2s->clk)) {
+		return dev_err_probe(&pdev->dev,
+				PTR_ERR(i2s->clk),
+				"failed to get i2s clock\n");
+	}
 
 	platform_set_drvdata(pdev, i2s);
 
 	ret = ma35d1_i2s_setup_dma(pdev, i2s);
-	if (ret)
+	if (ret) {
 		return ret;
-
+	}
 	pm_runtime_enable(&pdev->dev);
-
 
 	ret = ma35d1_i2s_parse_endpoint_clock(pdev, i2s);
 	if (ret) {
 		goto err_pm_disable;
 	}
 
+	dev_info(&pdev->dev,
+		"early MCLK: keep=%d rate=%u\n",
+		i2s->keep_mclk, i2s->early_mclk_rate);
+
 	if (i2s->keep_mclk) {
+
 		ret = pm_runtime_resume_and_get(&pdev->dev);
 		if (ret < 0) {
 			goto err_pm_disable;
 		}
+
 		ret = ma35d1_i2s_program_mclk(i2s);
 
 		if (ret) {
@@ -640,21 +653,30 @@ static int ma35d1_i2s_drvprobe(struct platform_device *pdev)
 				MA35D1_I2S_CTL0_MCLKEN);
 	}
 
+	dev_info(&pdev->dev,
+		"CTL0=0x%08x CLKDIV=0x%08x\n",
+		ma35d1_i2s_read(i2s, MA35D1_I2S_CTL0),
+		ma35d1_i2s_read(i2s, MA35D1_I2S_CLKDIV));
+
 	ret = devm_snd_soc_register_component(&pdev->dev,
 					&ma35d1_i2s_component,
 					&ma35d1_i2s_dai, 1);
-	if (ret)
+
+	if (ret) {
 		goto err_pm_disable;
+	}
 
 	ret = devm_ma35d1_pcm_register(&pdev->dev);
-	if (ret)
+	if (ret) {
 		goto err_pm_disable;
-
+	}
 	return 0;
 
 err_pm_put:
-	if (i2s->keep_mclk)
+	if (i2s->keep_mclk) {
 		pm_runtime_put_sync(&pdev->dev);
+	}
+
 err_pm_disable:
 	pm_runtime_disable(&pdev->dev);
 	return ret;

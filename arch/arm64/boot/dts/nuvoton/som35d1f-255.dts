@@ -163,21 +163,6 @@
 		clock-frequency = <12288000>;
 	};
 
-	sound {
-		compatible = "nuvoton,ma35d1-audio-sgtl5000";
-		label = "MA35D1-SGTL5000";
-
-		dais = <&i2s0_port>;
-
-		widgets =
-			"Headphone", "Headphone Jack",
-			"Microphone", "Mic Jack";
-
-		routing =
-			"Headphone Jack", "HP_OUT",
-			"MIC_IN", "Mic Jack";
-	};
-
 	// Networking
 	wlan_en_reg: regulator-wlan-en {
 		compatible = "regulator-fixed";
@@ -407,6 +392,20 @@
 };
 
 // Audio
+&sound {
+	compatible = "nuvoton,ma35d1-audio-sgtl5000";
+	label = "MA35D1-SGTL5000";
+
+	dais = <&i2s0_port>;
+
+	widgets =
+		"Headphone", "Headphone Jack",
+		"Microphone", "Mic Jack";
+
+	routing =
+		"Headphone Jack", "HP_OUT",
+		"MIC_IN", "Mic Jack";
+};
 
 &i2s0 {
 	status = "okay";
