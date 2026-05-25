@@ -393,8 +393,9 @@
 &sound {
 	compatible = "nuvoton,ma35d1-audio-sgtl5000";
 	label = "MA35D1-SGTL5000";
-
 	dais = <&i2s0_port>;
+
+	status = "okay";
 
 	widgets =
 		"Headphone", "Headphone Jack",
@@ -411,7 +412,6 @@
 	// clocks = <&clk I2S0_GATE>;
 	// resets = <&reset MA35D1_RESET_I2S0>;
 
-
 	i2s0_port: port {
 		i2s0_ep: endpoint {
 			remote-endpoint = <&sgtl5000_ep>;
@@ -420,9 +420,9 @@
 			bitclock-master;
 			frame-master;
 			//  48000 * 256 = 12.288 MHz
+			mclk-fs = <256>;
 
 			// TODO clean this up after testing.
-			mclk-fs = <256>;
 			system-clock-frequency = <12288000>;
 			system-clock-direction-out;
 		};
