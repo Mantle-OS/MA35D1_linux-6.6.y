@@ -75,15 +75,18 @@ static int ma35d1_i2s_parse_endpoint_clock(struct platform_device *pdev,
 	int ret = 0;
 
 	ep = of_graph_get_next_endpoint(pdev->dev.of_node, NULL);
-	if (!ep)
+	if (!ep) {
 		return 0;
+	}
 
-	if (!of_property_read_bool(ep, "system-clock-direction-out"))
+	if (!of_property_read_bool(ep, "system-clock-direction-out")) {
 		goto out_put;
+	}
 
 	ret = of_property_read_u32(ep, "system-clock-frequency", &rate);
 	if (ret) {
-		ret = dev_err_probe(&pdev->dev, ret,
+		ret = dev_err_probe(&pdev->dev,
+				ret,
 				"system-clock-direction-out requires system-clock-frequency\n");
 		goto out_put;
 	}
@@ -529,17 +532,23 @@ static int ma35d1_i2s_setup_dma(struct platform_device *pdev,
 	u32 rx_reqsel;
 	int ret;
 
-	ret = device_property_read_u32(&pdev->dev, "nuvoton,tx-dma-reqsel",
-				       &tx_reqsel);
-	if (ret)
+	ret = device_property_read_u32(&pdev->dev,
+				"nuvoton,tx-dma-reqsel",
+				&tx_reqsel);
+	if (ret) {
 		return dev_err_probe(&pdev->dev, ret,
-				     "missing nuvoton,tx-dma-reqsel\n");
+			"missing nuvoton,tx-dma-reqsel\n");
+	}
 
-	ret = device_property_read_u32(&pdev->dev, "nuvoton,rx-dma-reqsel",
-				       &rx_reqsel);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "missing nuvoton,rx-dma-reqsel\n");
+	ret = device_property_read_u32(&pdev->dev,
+				"nuvoton,rx-dma-reqsel",
+				&rx_reqsel);
+
+	if (ret) {
+		return dev_err_probe(&pdev->dev,
+				ret,
+				"missing nuvoton,rx-dma-reqsel\n");
+	}
 
 	i2s->playback_pcfg.reqsel = tx_reqsel;
 	i2s->capture_pcfg.reqsel = rx_reqsel;

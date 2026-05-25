@@ -259,10 +259,12 @@
 };
 
 &gmac1 {
-	status = "okay";
 	phy-mode = "rmii";
 	phy-handle = <&eth_phy1>;
 	emac-phy-reset = <&gpio_expander_on_carrier 10 GPIO_ACTIVE_HIGH>;
+
+	status = "okay";
+
 	mdio1: mdio{
 		compatible = "snps,dwmac-mdio";
 		#address-cells = <1>;

@@ -153,20 +153,23 @@
 };
 
 &rtc {
-	status = "okay";
 	lxt-detect-enable = <1>;
+
+	status = "okay";
 };
 
 // console
 &uart0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart0>;
+
 	status = "okay";
 };
 
 &uart1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart1>;
+
 	status = "okay";
 
 	uart-has-rtscts;
@@ -175,6 +178,7 @@
 &uart3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart3>;
+
 	status = "okay";
 
 	uart-has-rtscts;
@@ -183,6 +187,7 @@
 &uart5 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart5>;
+
 	status = "okay";
 
 	uart-has-rtscts;
@@ -279,13 +284,10 @@
 	};
 };
 
-&i2s0{
+&i2s0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2s0>;
-	mclk_out = <12288000>;
 	status = "okay";
-
-	#sound-dai-cells = <0>;
 };
 
 
@@ -306,6 +308,7 @@
 	pinctrl-0 = <&pinctrl_spi0>;
 	num_cs = <4>;
 	spi-max-frequency = <5000000>;
+
 	status = "okay";
 };
 
@@ -412,7 +415,6 @@
 
 	status = "okay";
 
-	// FIXME
 	// RefDes:  U16
 	// Chip: MTFC4GACAJCN-4M IT
 	//
@@ -422,7 +424,7 @@
 		bus-width = <4>;
 		non-removable;
 		no-1-8-v;
-		sd-uhs-sdr50; // WHAT ? upstream sdhci0  -> 		dhci-caps-mask = <0x4 0x0>;  /* No support DDR50 mode */
+		sd-uhs-sdr50;
 	};
 };
 
