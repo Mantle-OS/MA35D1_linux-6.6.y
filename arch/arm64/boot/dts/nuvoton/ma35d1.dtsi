@@ -585,6 +585,7 @@
 		clocks = <&clk I2C1_GATE>;
 		clock-frequency = <100000>;
 		resets = <&reset MA35D1_RESET_I2C1>;
+		nuvoton,nfcnt = <0>;
 		status = "disabled";
 		#address-cells = <1>;
 		#size-cells = <0>;
