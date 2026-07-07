@@ -174,10 +174,11 @@ static int ma35d1_card_parse_endpoint_fmt(struct device *dev,
 	 * after first compile/test. Keep it contained here.
 	 */
 	ret = ma35d1_card_parse_dai_format(dev, ep, &fmt);
-	if (!ret)
+	if (ret)
 		return ret;
 
 	priv->dai_fmt = fmt;
+
 
 
 	ret = of_property_read_u32(ep, "mclk-fs", &mclk_fs);
