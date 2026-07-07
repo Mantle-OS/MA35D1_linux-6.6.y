@@ -288,6 +288,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2s0>;
 	status = "okay";
+	#clock-cells = <0>;
 };
 
 

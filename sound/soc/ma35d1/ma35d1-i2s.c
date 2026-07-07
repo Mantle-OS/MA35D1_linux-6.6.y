@@ -8,7 +8,11 @@
  */
 
 #include <linux/bitfield.h>
+
 #include <linux/clk.h>
+#include <linux/clk-provider.h>
+#include <linux/of_clk.h>
+
 #include <linux/device.h>
 #include <linux/dmaengine.h>
 #include <linux/io.h>
@@ -130,6 +134,35 @@ static int ma35d1_i2s_program_mclk(struct ma35d1_i2s *i2s)
 				val);
 
 	return 0;
+}
+
+
+/*
+ * Expose the physically-running MCLK as a real clk provider so that
+ * consumers (e.g. the SGTL5000 codec's "clocks" phandle) get a proper
+ * -EPROBE_DEFER from the clock core until this device has actually
+ * probed and turned MCLK on — rather than resolving instantly against
+ * a dummy fixed-clock DT node with no relationship to real hardware.
+ *
+ * This must only be called after the MCLKEN/I2S_EN bits and the
+ * divider have already been written, so that any consumer which
+ * successfully resolves this clock is resolving something real.
+*/
+static int ma35d1_i2s_register_mclk_provider(struct platform_device *pdev,
+					     struct ma35d1_i2s *i2s)
+{
+	struct clk_hw *hw;
+
+	hw = devm_clk_hw_register_fixed_rate(&pdev->dev,
+					     "ma35d1-i2s0-mclk",
+					     NULL, 0,
+					     i2s->early_mclk_rate);
+	if (IS_ERR(hw))
+		return dev_err_probe(&pdev->dev, PTR_ERR(hw),
+				     "failed to register MCLK provider\n");
+
+	return devm_of_clk_add_hw_provider(&pdev->dev,
+					   of_clk_hw_simple_get, hw);
 }
 
 
@@ -660,6 +693,11 @@ static int ma35d1_i2s_drvprobe(struct platform_device *pdev)
 				MA35D1_I2S_CTL0_MCLKEN,
 				MA35D1_I2S_CTL0_I2S_EN |
 				MA35D1_I2S_CTL0_MCLKEN);
+
+		ret = ma35d1_i2s_register_mclk_provider(pdev, i2s);
+		if (ret) {
+			goto err_pm_put;
+		}
 	}
 
 	dev_info(&pdev->dev,

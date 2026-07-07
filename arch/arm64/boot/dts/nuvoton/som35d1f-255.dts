@@ -154,13 +154,6 @@
 		};
 	};
 
-
-	audio_clk1: audio-clk1 {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <12288000>;
-	};
-
 	// Networking
 	wlan_en_reg: regulator-wlan-en {
 		compatible = "regulator-fixed";
@@ -357,7 +350,7 @@
 		VDDIO-supply = <&reg_3p3_vcc>;
 		VDDD-supply = <&reg_1p5v>;
 
-		clocks = <&audio_clk1>;
+		clocks = <&i2s0>;
 
 		status = "okay";
 
@@ -410,10 +403,6 @@
 
 &i2s0 {
 	status = "okay";
-	// interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
-	// clocks = <&clk I2S0_GATE>;
-	// resets = <&reset MA35D1_RESET_I2S0>;
-
 	i2s0_port: port {
 		i2s0_ep: endpoint {
 			remote-endpoint = <&sgtl5000_ep>;
