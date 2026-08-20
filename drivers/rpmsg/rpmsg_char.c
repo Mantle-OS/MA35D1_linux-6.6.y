@@ -295,9 +295,6 @@ static __poll_t rpmsg_eptdev_poll(struct file *filp, poll_table *wait)
 	struct rpmsg_eptdev *eptdev = filp->private_data;
 	__poll_t mask = 0;
 
-	if (!eptdev->ept)
-		return EPOLLERR;
-
 	poll_wait(filp, &eptdev->readq, wait);
 
 	if (!skb_queue_empty(&eptdev->queue))
@@ -307,6 +304,10 @@ static __poll_t rpmsg_eptdev_poll(struct file *filp, poll_table *wait)
 		mask |= EPOLLPRI;
 
 	mutex_lock(&eptdev->ept_lock);
+	if (!eptdev->ept) {
+		mutex_unlock(&eptdev->ept_lock);
+		return EPOLLERR;
+	}
 	mask |= rpmsg_poll(eptdev->ept, filp, wait);
 	mutex_unlock(&eptdev->ept_lock);
 
