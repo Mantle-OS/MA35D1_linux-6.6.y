@@ -62,19 +62,20 @@
 /*
  * MA35D1_I2S_CLKDIV - Clock divider register
  *
- * BCLKDIV controls the bit clock divider.
- * MCLKDIV controls the master clock divider.
+ * BCLKDIV [17:8] controls the bit-clock divider:
  *
- * The old vendor driver appeared to write these fields reversed:
+ *     F_BCLK = F_I2SCLK / (2 * (BCLKDIV + 1))
  *
- *     (bclkdiv << 8) | mclkdiv
+ * MCLKDIV [6:0] controls the master-clock divider:
  *
- * Based on the masks below, BCLKDIV is bits [6:0] and MCLKDIV is bits [17:8].
- * The implementation should use FIELD_PREP() with these masks instead of
- * open-coded shifts.
+ *     MCLKDIV == 0:
+ *         F_MCLK = F_I2SCLK
+ *
+ *     MCLKDIV >= 1:
+ *         F_MCLK = F_I2SCLK / (2 * MCLKDIV)
  */
-#define MA35D1_I2S_CLKDIV_BCLKDIV	GENMASK(6, 0)
-#define MA35D1_I2S_CLKDIV_MCLKDIV	GENMASK(17, 8)
+#define MA35D1_I2S_CLKDIV_BCLKDIV	GENMASK(17, 8)
+#define MA35D1_I2S_CLKDIV_MCLKDIV	GENMASK(6, 0)
 
 /*
  * MA35D1_I2S_IEN - Interrupt enable register
