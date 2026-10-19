@@ -17,23 +17,23 @@
 
 #include "ma35d1-card.h"
 
-#ifdef CONFIG_SND_SOC_MA35D1_CARD_SGTL5000
+#ifdef CONFIG_SND_SOC_MA35D1_AUDIO_SGTL5000
 extern const struct ma35d1_card_profile ma35d1_sgtl5000_profile;
 #endif
 
-#ifdef CONFIG_SND_SOC_MA35D1_CARD_NAU8822
+#ifdef CONFIG_SND_SOC_MA35D1_AUDIO_NAU8822
 extern const struct ma35d1_card_profile ma35d1_nau8822_profile;
 #endif
 
 
 static const struct of_device_id ma35d1_card_of_match[] = {
-#ifdef CONFIG_SND_SOC_MA35D1_CARD_SGTL5000
+#ifdef CONFIG_SND_SOC_MA35D1_AUDIO_SGTL5000
 	{
 		.compatible = "nuvoton,ma35d1-audio-sgtl5000",
 		.data = &ma35d1_sgtl5000_profile,
 	},
 #endif
-#ifdef CONFIG_SND_SOC_MA35D1_CARD_NAU8822
+#ifdef CONFIG_SND_SOC_MA35D1_AUDIO_NAU8822
 	{
 		.compatible = "nuvoton,ma35d1-audio-nau8822",
 		.data = &ma35d1_nau8822_profile,
