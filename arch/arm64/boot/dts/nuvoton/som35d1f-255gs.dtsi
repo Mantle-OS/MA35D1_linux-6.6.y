@@ -306,7 +306,7 @@
 &display {
 	memory-region = <&display_buf>;
 	// OPTIONS:  0: D16CFG1, 1: D16CFG2, 2: D16CFG3, 3: D18CFG1, 4: D18CFG2, 5: D24
-	nuvoton,dpi-format = <4>;
+	nuvoton,dpi-format = <3>;
 	status = "disabled";
 	port {
 		/delete-node/ endpoint@0;
