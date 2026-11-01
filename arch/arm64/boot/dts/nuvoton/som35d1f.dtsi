@@ -410,6 +410,7 @@
 	pinctrl-0 = <&pinctrl_sdhci0>;
 	disable-wp;
 	non-removable;
+	broken-cd;
 	/delete-property/ wp-gpios;
 	// wp-gpios = <&gpioc 7 GPIO_ACTIVE_HIGH>;
 
@@ -574,10 +575,10 @@
 				<SYS_GPB_MFPH_PB10MFP_SPI0_MOSI		&pcfg_default>,
 				<SYS_GPB_MFPH_PB11MFP_SPI0_MISO		&pcfg_default>,
 
-				<SYS_GPD_MFPH_PD11MFP_GPIO		&pcfg_default>,
-				<SYS_GPD_MFPH_PD10MFP_GPIO		&pcfg_default>,
-				<SYS_GPD_MFPH_PD9MFP_GPIO		&pcfg_default>,
-				<SYS_GPL_MFPH_PL14MFP_GPIO		&pcfg_default>;
+				<SYS_GPD_MFPH_PD11MFP_GPIO			&pcfg_default>,
+				<SYS_GPD_MFPH_PD10MFP_GPIO			&pcfg_default>,
+				<SYS_GPD_MFPH_PD9MFP_GPIO			&pcfg_default>,
+				<SYS_GPL_MFPH_PL14MFP_GPIO			&pcfg_default>;
 		};
 
 		pinctrl_qspi0: qspi0grp {
@@ -595,7 +596,7 @@
 		pinctrl_gmac0: gmac0grp {
 			// #nRESET_PHY
 			nuvoton,pins =
-				<SYS_GPD_MFPH_PD8MFP_GPIO 		&pcfg_default>,
+				<SYS_GPD_MFPH_PD8MFP_GPIO 			&pcfg_default>,
 				<SYS_GPE_MFPL_PE0MFP_RGMII0_MDC		&pcfg_emac_1_8V>,
 				<SYS_GPE_MFPL_PE1MFP_RGMII0_MDIO	&pcfg_emac_1_8V>,
 
@@ -647,8 +648,8 @@
 	usb_pins {
 		pinctrl_hsusb0: hsusb0grp {
 			nuvoton,pins =
-				<SYS_GPL_MFPH_PL12MFP_HSUSBH_PWREN	&pcfg_default>,
-				<SYS_GPL_MFPH_PL13MFP_HSUSBH_OVC	&pcfg_default>,
+				<SYS_GPL_MFPH_PL12MFP_HSUSBH_PWREN		&pcfg_default>,
+				<SYS_GPL_MFPH_PL13MFP_HSUSBH_OVC		&pcfg_default>,
 				<SYS_GPF_MFPH_PF15MFP_HSUSB0_VBUSVLD	&pcfg_default>;
 		};
 	};
@@ -676,7 +677,7 @@
 				<SYS_GPJ_MFPL_PJ7MFP_SD1_CLK		&pcfg_sdhci_drive2_3_3V>,
 				<SYS_GPJ_MFPL_PJ6MFP_SD1_CMD		&pcfg_sdhci_drive2_3_3V>,
 				<SYS_GPJ_MFPL_PJ5MFP_SD1_nCD		&pcfg_sdhci_drive2_3_3V>,
-				<SYS_GPJ_MFPL_PJ4MFP_SD1_WP		&pcfg_sdhci_drive2_3_3V>;
+				<SYS_GPJ_MFPL_PJ4MFP_SD1_WP			&pcfg_sdhci_drive2_3_3V>;
 		};
 
 	};
@@ -696,7 +697,7 @@
 		// #TS_INT
 		pinctrl_tsc2004:tsc2004grp {
 			nuvoton,pins =
-				<SYS_GPG_MFPL_PG1MFP_GPIO 		&pcfg_default>;
+				<SYS_GPG_MFPL_PG1MFP_GPIO 			&pcfg_default>;
 		};
 
 		pinctrl_lcm: lcmgrp {
@@ -749,7 +750,7 @@
 				<SYS_GPM_MFPL_PM7MFP_CCAP0_DATA5	&pcfg_default>,
 				<SYS_GPM_MFPH_PM8MFP_CCAP0_DATA6	&pcfg_default>,
 				<SYS_GPM_MFPH_PM9MFP_CCAP0_DATA7	&pcfg_default>,
-				<SYS_GPA_MFPH_PA14MFP_GPIO		&pcfg_default>;
+				<SYS_GPA_MFPH_PA14MFP_GPIO			&pcfg_default>;
 		};
 	};
 
