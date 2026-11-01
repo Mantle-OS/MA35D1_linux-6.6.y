@@ -7,6 +7,7 @@
  */
 
 /dts-v1/;
+
 #include "ma35d1.dtsi"
 #include "som35d1f.dtsi"
 #include "som35d1f-255gs.dtsi"
@@ -15,26 +16,61 @@
 / {
 	model = "EMAC SOM-35D1F with 255gs carrier and 10 inch panel";
 	compatible = "emac,som35d1f-255gs-10-inch", "emac,som35d1f-255gs", "emac,som35d1f", "nuvoton,ma35d1";
+
+	// 10 inch
+	lvds_5v_reg: fixedregulator1 {
+		compatible = "regulator-fixed";
+		regulator-name = "lvds-5-en-regulator";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		startup-delay-us = <70000>;
+		gpio = <&gpio_expander 9 GPIO_ACTIVE_HIGH>;  // Issue this expanger lives on i2c which comes up after DRM
+		// enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
+		status = "okay";
+	};
+	osd_panel: panel-osd {
+		compatible = "osd,osd101T1515-45ts"; // TODO add to simple panel atm this is DSI and not LVDS
+		backlight = <&pwm_backlight>;   // TODO
+		power-supply = <&lvds_5v_reg>; // TODO
+		data-mapping = "jeida-18";		// TODO
+		status = "okay";
+		port {
+			osd_panel_in: endpoint@0 {
+				reg = <0>;
+				remote-endpoint = <&bridge_out>;
+			};
+		};
+	};
+
 };
 
-&pwm_backlight{
+&pwm_backlight {
 	status = "okay";
-}
-
-&lvds_5v_reg {
-	status = "okay";
-}
+};
 
 &lvds_bridge {
 	power-supply = <&lvds_5v_reg>;
 	status = "okay";
+	/delete-property/ ports;
+	ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				bridge_in: endpoint {
+					remote-endpoint = <&dpi_out>;
+				};
+			};
+			port@1 {
+				reg = <1>;
+				bridge_out: endpoint {
+					remote-endpoint = <&osd_panel_in>;
+				};
+			};
+		};
 };
-
-&osd_panel {
-	power-supply = <&lvds_5v_reg>; // TODO
-	status = "okay";
-};
-
 
 &gc520l {
 	memory-region = <&gc520l_buf>;
@@ -56,7 +92,7 @@
  * 10-inch touch connector CN4 is intentionally cross-mapped.
  *
  * Panel touch unit:
- 	 TODO ADD wacky mapping here
+ *	 TODO ADD wacky mapping here
  *
  * This means panel X/Y are swapped relative to TSC2004 X/Y, AND axis has inversion
  */
@@ -66,8 +102,9 @@
 	touchscreen-inverted-y;
 	touchscreen-inverted-x;
 	touchscreen-swapped-x-y;
-	touchscreen-x-mm = <152>; // TODO seems wrong silly math
-	touchscreen-y-mm = <91>;  // TODO seems wrong
+	// This seems wrong
+	touchscreen-x-mm = <152>;
+	touchscreen-y-mm = <91>;
 	status = "okay";
 };
 

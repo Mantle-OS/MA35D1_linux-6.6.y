@@ -679,8 +679,8 @@
 	// };
 
 	sound: sound {
-		compatible = "nuvoton,ma35d1-audio-nau8822";
-		dais = <&i2s0_port>;
+	//	compatible = "nuvoton,ma35d1-audio-nau8822";
+	//	dais = <&i2s0_port>;
 		status = "disabled";
 	};
 

@@ -4,11 +4,13 @@
  *
  * Copyright (C) 2023 EMAC Inc.
  *
- */
+*/
 
-/dts-v1/;
+
 #include "som35d1f.dtsi"
+
 /delete-node/ &panel;
+
 / {
 	model = "EMAC SOM-35D1F with SOM-255";
 	compatible = "emac,som35d1f-255gs", "emac,som35d1f", "nuvoton,ma35d1";
@@ -72,25 +74,11 @@
 	};
 
 	// 7 inch
-	lvds_3v3_reg: fixedregulator {
+	lvds_3v3_reg: fixedregulator0 {
 		compatible = "regulator-fixed";
 		regulator-name = "lvds-3v3-en-regulator";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		startup-delay-us = <70000>;
-		gpio = <&gpio_expander 9 GPIO_ACTIVE_HIGH>;  // Issue this expanger lives on i2c which comes up after DRM
-		// enable-active-high;
-		regulator-always-on;
-		regulator-boot-on;
-		status = "disabled";
-	};
-
-	// 10 inch
-	lvds_5v_reg: fixedregulator {
-		compatible = "regulator-fixed";
-		regulator-name = "lvds-5-en-regulator";
-		regulator-min-microvolt = <5000000>;
-		regulator-max-microvolt = <5000000>;
 		startup-delay-us = <70000>;
 		gpio = <&gpio_expander 9 GPIO_ACTIVE_HIGH>;  // Issue this expanger lives on i2c which comes up after DRM
 		// enable-active-high;
@@ -144,7 +132,7 @@
 			port@1 {
 				reg = <1>;
 				bridge_out: endpoint {
-					remote-endpoint = <&panel_in>;
+					remote-endpoint = <&fema_panel_in>;
 				};
 			};
 		};
@@ -163,28 +151,13 @@
 
 		status = "disabled";
 		port {
-			panel_in: endpoint@0 {
+			fema_panel_in: endpoint@0 {
 				reg = <0>;
 				remote-endpoint = <&bridge_out>;
 			};
 		};
 	};
 
-
-	osd_panel: panel-osd {
-		compatible = "osd,osd101T1515-45ts"; // TODO add to simple panel atm this is DSI and not LVDS
-		backlight = <&pwm_backlight>;   // TODO
-		power-supply = <&lvds_reg>; // TODO
-		data-mapping = "jeida-18";		// TODO
-
-		status = "disabled";
-		port {
-			panel_in: endpoint@0 {
-				reg = <0>;
-				remote-endpoint = <&bridge_out>;
-			};
-		};
-	};
 
 };
 

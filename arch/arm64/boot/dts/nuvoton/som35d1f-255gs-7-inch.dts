@@ -11,11 +11,6 @@
 #include "som35d1f.dtsi"
 #include "som35d1f-255gs.dtsi"
 
-/*
- remove the panel that they have upstream its driver is setup for compatible = "avic,tm070ddh03", "panel-dpi";
- so we delete and create the fema_panel below
- https://github.com/OpenNuvoton/MA35D1_linux-6.6.y/blob/master/arch/arm64/boot/dts/nuvoton/ma35d1.dtsi#L1733
-*/
 
 / {
 	model = "EMAC SOM-35D1F with 255gs carrier and 7 inch panel";
@@ -24,11 +19,11 @@
 
 &pwm_backlight {
 	status = "okay";
-}
+};
 
-&lvds_bridge: {
+&lvds_bridge {
 	status = "okay";
-}
+};
 
 &lvds_3v3_reg {
 	status = "okay";
