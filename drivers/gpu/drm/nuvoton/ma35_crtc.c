@@ -211,10 +211,8 @@ static u32 ma35_crtc_get_bus_flags(struct ma35_drm *priv,
 		bus_flags = connector->display_info.bus_flags;
 
 	if (!bus_flags) {
-		drm_info(drm_dev,
-				 "No connector bus_flags; using temporary fallback\n");
-		bus_flags = DRM_BUS_FLAG_DE_HIGH |
-			DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
+		drm_info(drm_dev, "No connector bus_flags; using temporary fallback\n");
+		bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
 	}
 
 	drm_dbg(drm_dev,
@@ -256,7 +254,7 @@ static void ma35_crtc_program_panel_config(struct ma35_drm *priv,
 
 	regmap_write(priv->regmap, MA35_PANEL_CONFIG, reg);
 	// ma35_reg_write_dbg(priv, MA35_PANEL_CONFIG, reg, "PANEL_CONFIG");
-	// ma35_reg_read_dbg(priv, MA35_PANEL_CONFIG, "PANEL_CONFIG readback");
+	ma35_reg_read_dbg(priv, MA35_PANEL_CONFIG, "PANEL_CONFIG readback");
 
 
 	drm_dbg(drm_dev, "MA35_PANEL_CONFIG programmed: 0x%08x\n", reg);
@@ -382,7 +380,13 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 
 	/* Signals */
 	bus_flags = ma35_crtc_get_bus_flags(priv, connector);
+
+	drm_info(drm_dev, "TEST: connector bus_flags=0x%x\n", bus_flags);
+	bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
+
 	ma35_crtc_program_panel_config(priv, bus_flags);
+
+
 
 	/* Gamma */
 	if (new_state->gamma_lut) {
@@ -422,6 +426,8 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	reg = FIELD_PREP(MA35_DPI_FORMAT_MASK, crtc->dpi_format);
 	regmap_write(priv->regmap, MA35_DPI_CONFIG, reg);
 
+	ma35_reg_read_dbg(priv, MA35_DPI_CONFIG, "DPI_CONFIG readback");
+
 	drm_info(drm_dev,
 		"MA35_DPI_CONFIG programmed: 0x%08x, dpi_format=%u\n",
 		reg, crtc->dpi_format);
@@ -434,8 +440,7 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 
 		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_TABLE_LOW, reg);
 		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_TABLE_HIGH, reg);
-		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_CONFIG,
-					 MA35_DITHER_ENABLE);
+		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_CONFIG, MA35_DITHER_ENABLE);
 	} else {
 		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_CONFIG, 0);
 	}
