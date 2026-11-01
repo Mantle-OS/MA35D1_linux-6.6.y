@@ -4161,7 +4161,7 @@ static const struct panel_desc fema_gm800480d_70 = {
 		.height = 91,
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB666_1X7X3_SPWG,
-	.bus_flags = DRM_BUS_FLAG_DE_HIGH
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH,
 	// | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE,
 	.connector_type = DRM_MODE_CONNECTOR_LVDS,
 };
