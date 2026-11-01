@@ -4149,7 +4149,7 @@ static const struct drm_display_mode fema_gm800480d_70_mode = {
 	.vsync_start = 480 + 13,
 	.vsync_end = 480 + 13 + 2,
 	.vtotal = 525,
-	.flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
+	// .flags = DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC,
 };
 
 static const struct panel_desc fema_gm800480d_70 = {
@@ -4161,7 +4161,8 @@ static const struct panel_desc fema_gm800480d_70 = {
 		.height = 91,
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB666_1X7X3_SPWG,
-	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH
+	// | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE,
 	.connector_type = DRM_MODE_CONNECTOR_LVDS,
 };
 
