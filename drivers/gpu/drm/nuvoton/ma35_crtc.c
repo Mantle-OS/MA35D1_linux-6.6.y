@@ -20,6 +20,8 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_gem_dma_helper.h>
+#include <drm/drm_fb_dma_helper.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
 
@@ -265,6 +267,17 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 {
 	struct ma35_crtc *crtc = ma35_crtc(drm_crtc);
 	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
+	static const u32 address_regs[] = {
+		MA35_FRAMEBUFFER_ADDRESS, MA35_FRAMEBUFFER_UPLANAR_ADDRESS,
+		MA35_FRAMEBUFFER_VPLANAR_ADDRESS,
+	};
+	static const u32 stride_regs[] = {
+		MA35_FRAMEBUFFER_STRIDE, MA35_FRAMEBUFFER_USTRIDE,
+		MA35_FRAMEBUFFER_VSTRIDE,
+	};
+	struct drm_plane_state *primary_state;
+	struct drm_framebuffer *fb;
+	struct ma35_layer *primary;
 	struct drm_crtc_state *new_state;
 	struct drm_display_mode *mode;
 	struct drm_color_lut *lut;
@@ -273,8 +286,10 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	struct drm_display_info *display_info = NULL;
 	struct drm_device *drm_dev = &priv->drm_dev;
 	u32 bus_flags;
-	u32 reg;
-	int i, size;
+	u32 reg, format, bpp;
+	u32 fb_config = MA35_PRIMARY_RESET;
+	dma_addr_t dma;
+	int i, size, ret;
 
 	new_state = drm_atomic_get_new_crtc_state(state, drm_crtc);
 	mode = &new_state->adjusted_mode;
@@ -356,6 +371,45 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 			drm_info(drm_dev,
 			"First Bridge missing from MA35 interface\n");
 	}
+
+	/*
+	 * The custom tail enables the CRTC before updating planes. Prepare the
+	 * initial primary working set here, with timing held stopped (bit 4=0),
+	 * and write the start bit only after all initial registers are ready.
+	 * Leave the later plane callback intact for this bring-up experiment.
+	 */
+	primary_state = drm_atomic_get_new_plane_state(state, drm_crtc->primary);
+	if (!primary_state)
+		primary_state = drm_crtc->primary->state;
+	fb = primary_state->fb;
+	primary = container_of(drm_crtc->primary, struct ma35_layer, drm_plane);
+
+	if (fb) {
+		if (fb->format->num_planes > ARRAY_SIZE(address_regs)) {
+			drm_err(drm_dev, "MA35-INIT unsupported primary plane count %u\n",
+				fb->format->num_planes);
+			return;
+		}
+		ret = ma35_layer_format_validate(fb->format->format, &format, &bpp);
+		if (ret) {
+			drm_err(drm_dev, "MA35-INIT invalid primary fourcc=%#x ret=%d\n",
+				fb->format->format, ret);
+			return;
+		}
+		fb_config |= FIELD_PREP(MA35_PRIMARY_FORMAT_MASK, format) |
+			FIELD_PREP(MA35_PRIMARY_SWIZZLE_MASK, primary->config.swizzle) |
+			MA35_PRIMARY_ENABLE;
+		if (primary->config.colorkeylo || primary->config.colorkeyup)
+			fb_config |= FIELD_PREP(MA35_PRIMARY_TRANSPARENCY_MASK,
+					MA35_COLORKEY_ENABLE);
+	}
+	if (new_state->gamma_lut)
+		fb_config |= MA35_PRIMARY_GAMMA;
+
+	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, 0);
+	drm_info(drm_dev, "MA35-INIT hold timing stopped FB_CONFIG=0 ret=%d\n", ret);
+	if (ret)
+		return;
 
 	/* Timings */
 	reg = FIELD_PREP(MA35_DISPLAY_TOTAL_MASK,
@@ -462,6 +516,35 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_CONFIG, 0);
 	}
 
+	/* Primary dimensions, pitches and DMA addresses precede the start write. */
+	if (fb) {
+		reg = FIELD_PREP(MA35_LAYER_FB_HEIGHT, fb->height) |
+			FIELD_PREP(MA35_LAYER_FB_WIDTH, fb->width);
+		ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_SIZE, reg);
+		drm_info(drm_dev, "MA35-INIT primary size=%ux%u value=%#010x ret=%d\n",
+			fb->width, fb->height, reg, ret);
+		if (ret)
+			goto primary_init_failed;
+		for (i = 0; i < fb->format->num_planes; i++) {
+			dma = drm_fb_dma_get_gem_addr(fb, primary_state, i);
+			ret = regmap_write(priv->regmap, stride_regs[i], fb->pitches[i]);
+			if (ret)
+				goto primary_init_failed;
+			ret = regmap_write(priv->regmap, address_regs[i], dma);
+			drm_info(drm_dev,
+				 "MA35-INIT primary[%d] dma=%pad pitch=%u offset=%u ret=%d\n",
+				 i, &dma, fb->pitches[i], fb->offsets[i], ret);
+			if (ret)
+				goto primary_init_failed;
+		}
+	}
+	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, fb_config);
+	drm_info(drm_dev,
+		 "MA35-INIT start primary=%u FB_CONFIG=%#010x ret=%d\n",
+		 !!fb, fb_config, ret);
+	if (ret)
+		goto primary_init_failed;
+
 	// DEBUG FOR NOW
 	// ma35_crtc_dump_regs(priv, "BEFORE vblank_on"); // remove later or check debug flag
 	ma35_bringup_dump(priv, "crtc-before-vblank-on");
@@ -482,6 +565,11 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	// ma35_reg_read_dbg(priv,
 	// 		MA35_DEBUG_COUNTER_VALUE,
 	// 		"DEBUG_COUNTER_VALUE");
+
+	return;
+
+primary_init_failed:
+	drm_err(drm_dev, "MA35-INIT primary initialization failed ret=%d\n", ret);
 
 }
 

@@ -114,7 +114,7 @@ static const struct drm_prop_enum_list ma35_swizzles[] = {
 	{ MA35_SWIZZLE_UV, "UV" },
 };
 
-static int ma35_layer_format_validate(u32 fourcc, u32 *format, u32 *bpp)
+int ma35_layer_format_validate(u32 fourcc, u32 *format, u32 *bpp)
 {
 	u32 ret = 0;
 

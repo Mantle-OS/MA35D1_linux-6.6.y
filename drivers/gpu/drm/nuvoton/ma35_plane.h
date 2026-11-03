@@ -233,5 +233,6 @@ struct ma35_layer *ma35_layer_get_from_type(struct ma35_drm *priv,
 							enum drm_plane_type type);
 void ma35_overlay_attach_crtc(struct ma35_drm *priv);
 int ma35_plane_init(struct ma35_drm *priv);
+int ma35_layer_format_validate(u32 fourcc, u32 *format, u32 *bpp);
 
 #endif
