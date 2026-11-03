@@ -39,11 +39,15 @@ static void ma35_encoder_mode_set(struct drm_encoder *encoder,
 	struct drm_display_mode *adjusted_mode = &crtc_state->adjusted_mode;
 	unsigned long actual_rate;
 	int result;
+	int ret;
 
-	clk_set_rate(priv->dcupclk, adjusted_mode->clock * 1000);
+	ret = clk_set_rate(priv->dcupclk, adjusted_mode->clock * 1000);
 
 	actual_rate = clk_get_rate(priv->dcupclk);
 	result = DIV_ROUND_UP(actual_rate, 1000);
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_dev, "MA35-BRINGUP encoder pixel request=%d kHz actual=%lu Hz rounded=%d kHz ret=%d\n",
+			 adjusted_mode->clock, actual_rate, result, ret);
 
 	// drm_dbg(drm_dev,
 	// 	"Pixel clock: %d kHz; request: %d kHz\n",

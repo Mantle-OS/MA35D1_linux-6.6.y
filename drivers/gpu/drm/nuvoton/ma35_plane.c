@@ -382,16 +382,26 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 	u32 format, bpp, reg;
 	u32 *preg;
 
-	// drm_info(drm_plane->dev,
-	// 	 "PLANE UPDATE BEGIN: type=%u fb=%ux%u fourcc=0x%08x visible=%u crtc=%p\n",
-	// 	 drm_plane->type,
-	// 	 fb->width, fb->height,
-	// 	 fb->format->format,
-	// 	 new_state->visible,
-	// 	 new_state->crtc);
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_plane->dev,
+		 "MA35-BRINGUP PLANE UPDATE BEGIN: type=%u fb=%ux%u fourcc=0x%08x visible=%u crtc=%p\n",
+		 drm_plane->type,
+		 fb->width, fb->height,
+		 fb->format->format,
+		 new_state->visible,
+		 new_state->crtc);
+
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_plane->dev,
+			 "MA35-BRINGUP plane state=%p src=%u,%u %ux%u dst=%d,%d %ux%u\n",
+			 state, new_state->src_x >> 16, new_state->src_y >> 16,
+			 new_state->src_w >> 16, new_state->src_h >> 16,
+			 new_state->crtc_x, new_state->crtc_y,
+			 new_state->crtc_w, new_state->crtc_h);
 
 	layer->config.fourcc = fb->format->format;
 	ma35_layer_format_validate(fb->format->format, &format, &bpp);
+	ma35_bringup_dump(priv, "plane-before-programming");
 
 	if (drm_plane->type == DRM_PLANE_TYPE_PRIMARY) {
 		reg = FIELD_PREP(MA35_PRIMARY_FORMAT_MASK, format) |
@@ -404,15 +414,16 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 			reg |= FIELD_PREP(MA35_PRIMARY_TRANSPARENCY_MASK, MA35_COLORKEY_DISABLE);
 		}
 
-		// drm_info(drm_plane->dev,
-		// 	"PLANE PRIMARY CONFIG BUILD: format=%u bpp=%u swizzle=%u config=0x%08x\n",
-		// 	format, bpp, layer->config.swizzle, reg);
+		if (ma35_bringup_debug(priv))
+			drm_info(drm_plane->dev,
+			"MA35-BRINGUP PLANE PRIMARY CONFIG BUILD: format=%u bpp=%u swizzle=%u config=0x%08x\n",
+			format, bpp, layer->config.swizzle, reg);
 
-		regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, reg);
+		ma35_bringup_write(priv, MA35_FRAMEBUFFER_CONFIG, reg, "FB_CONFIG");
 
 		reg = FIELD_PREP(MA35_LAYER_FB_HEIGHT, fb->height) |
 				FIELD_PREP(MA35_LAYER_FB_WIDTH, fb->width);
-		regmap_write(priv->regmap, MA35_FRAMEBUFFER_SIZE, reg);
+		ma35_bringup_write(priv, MA35_FRAMEBUFFER_SIZE, reg, "FB_SIZE");
 
 		// background
 		regmap_write(priv->regmap, MA35_FRAMEBUFFER_BGCOLOR, layer->config.background);
@@ -470,27 +481,32 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 	for (int i = 0; i < fb->format->num_planes; i++) {
 		layer->fb_base[i] = drm_fb_dma_get_gem_addr(fb, new_state, i);
 
-		// drm_info(drm_plane->dev,
-		// 	"PLANE FB[%d]: type=%u dma=%pad pitch=%u addr_reg=0x%04x stride_reg=0x%04x\n",
-		// 	i, drm_plane->type,
-		// 	&layer->fb_base[i],
-		// 	fb->pitches[i],
-		// 	ma35_plane_properties[drm_plane->type].fb_addr[i],
-		// 	ma35_plane_properties[drm_plane->type].fb_stride[i]);
+		if (ma35_bringup_debug(priv))
+			drm_info(drm_plane->dev,
+			"MA35-BRINGUP PLANE FB[%d]: type=%u dma=%pad pitch=%u offset=%u addr_reg=0x%04x stride_reg=0x%04x\n",
+			i, drm_plane->type,
+			&layer->fb_base[i],
+			fb->pitches[i],
+			fb->offsets[i],
+			ma35_plane_properties[drm_plane->type].fb_addr[i],
+			ma35_plane_properties[drm_plane->type].fb_stride[i]);
 
 		preg = ma35_plane_properties[drm_plane->type].fb_addr;
-		regmap_write(priv->regmap, preg[i], layer->fb_base[i]);
+		ma35_bringup_write(priv, preg[i], layer->fb_base[i], "PLANE_ADDRESS");
 		preg = ma35_plane_properties[drm_plane->type].fb_stride;
-		regmap_write(priv->regmap, preg[i], fb->pitches[i]);
+		ma35_bringup_write(priv, preg[i], fb->pitches[i], "PLANE_STRIDE");
 	}
 
-	// drm_info(drm_plane->dev,
-	// 	"PLANE UPDATE END: type=%u fb=%ux%u fourcc=0x%08x pitch=%u dma=%pad\n",
-	// 	drm_plane->type,
-	// 	fb->width, fb->height,
-	// 	fb->format->format,
-	// 	fb->pitches[0],
-	// 	&layer->fb_base[0]);
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_plane->dev,
+		"MA35-BRINGUP PLANE UPDATE END: type=%u fb=%ux%u fourcc=0x%08x pitch=%u dma=%pad\n",
+		drm_plane->type,
+		fb->width, fb->height,
+		fb->format->format,
+		fb->pitches[0],
+		&layer->fb_base[0]);
+
+	ma35_bringup_dump(priv, "plane-after-programming");
 
 }
 

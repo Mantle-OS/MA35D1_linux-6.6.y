@@ -252,7 +252,7 @@ static void ma35_crtc_program_panel_config(struct ma35_drm *priv,
 		reg |= MA35_PANEL_DATA_POLARITY;
 	}
 
-	regmap_write(priv->regmap, MA35_PANEL_CONFIG, reg);
+	ma35_bringup_write(priv, MA35_PANEL_CONFIG, reg, "MA35_PANEL_CONFIG");
 	// ma35_reg_write_dbg(priv, MA35_PANEL_CONFIG, reg, "PANEL_CONFIG");
 	ma35_reg_read_dbg(priv, MA35_PANEL_CONFIG, "PANEL_CONFIG readback");
 
@@ -286,35 +286,48 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		display_info = &connector->display_info;
 	}
 
+	ma35_bringup_dump(priv, "crtc-enable-entry");
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_dev, "MA35-BRINGUP CRTC enable state=%p core=%lu pixel=%lu gamma=%u dither=%u dpi=%u\n",
+			 state, clk_get_rate(priv->dcuclk), clk_get_rate(priv->dcupclk),
+			 !!new_state->gamma_lut, crtc->dither_enable, crtc->dpi_format);
+
 	/* --- Timing / connector debug --- */
-	drm_dbg(drm_dev, "CRTC ENABLE: Mode Name: %s, Clock: %d KHz\n",
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_dev, "CRTC ENABLE: Mode Name: %s, Clock: %d KHz\n",
 			 mode->name, mode->clock);
 
-	drm_dbg(drm_dev,
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_dev,
 			"HTOTAL: %d, HACTIVE: %d, HSYNC_START: %d, HSYNC_END: %d\n",
 			mode->htotal, mode->hdisplay, mode->hsync_start,
 			mode->hsync_end);
 
-	drm_dbg(drm_dev,
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_dev,
 			"VTOTAL: %d, VACTIVE: %d, VSYNC_START: %d, VSYNC_END: %d\n",
 			mode->vtotal, mode->vdisplay, mode->vsync_start,
 			mode->vsync_end);
 
-	drm_dbg(drm_dev,
+	if (ma35_bringup_debug(priv))
+		drm_info(drm_dev,
 			"Mode Flags: 0x%x (NHSYNC: %s, NVSYNC: %s)\n", mode->flags,
 			(mode->flags & DRM_MODE_FLAG_NHSYNC) ? "yes" : "no",
 			(mode->flags & DRM_MODE_FLAG_NVSYNC) ? "yes" : "no");
 
 	if (connector) {
-		drm_dbg(drm_dev, "Connector Name: %s, Connector Type: %d\n",
+		if (ma35_bringup_debug(priv))
+			drm_info(drm_dev, "Connector Name: %s, Connector Type: %d\n",
 			connector->name, connector->connector_type);
 
-		drm_dbg(drm_dev,
+		if (ma35_bringup_debug(priv))
+			drm_info(drm_dev,
 			"Connector display_info: bus_flags=0x%x, num_bus_formats=%u, bpc=%u\n",
 			display_info->bus_flags, display_info->num_bus_formats, display_info->bpc);
 
 		for (i = 0; i < display_info->num_bus_formats; i++){
-			drm_dbg(drm_dev,
+			if (ma35_bringup_debug(priv))
+				drm_info(drm_dev,
 				"Connector bus_format[%d] = 0x%x\n",
 				i, display_info->bus_formats[i]);
 		}
@@ -323,20 +336,24 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	}
 
 	if (bridge) {
-		drm_dbg(drm_dev,
+		if (ma35_bringup_debug(priv))
+			drm_info(drm_dev,
 			"First Bridge: Name: %s, Type: %d\n",
 			bridge->of_node ? bridge->of_node->name : "unknown", bridge->type);
 
 		if (bridge->timings) {
-			drm_dbg(drm_dev,
+			if (ma35_bringup_debug(priv))
+				drm_info(drm_dev,
 				"First Bridge timings: input_flags=0x%x, setup=%u ps, hold=%u ps\n",
 				bridge->timings->input_bus_flags, bridge->timings->setup_time_ps, bridge->timings->hold_time_ps);
 		} else {
-			drm_dbg(drm_dev,
+			if (ma35_bringup_debug(priv))
+				drm_info(drm_dev,
 				"First Bridge: No static timings defined\n");
 		}
 	} else {
-		drm_dbg(drm_dev,
+		if (ma35_bringup_debug(priv))
+			drm_info(drm_dev,
 			"First Bridge missing from MA35 interface\n");
 	}
 
@@ -345,7 +362,7 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 			mode->htotal) | FIELD_PREP(MA35_DISPLAY_ACTIVE_MASK,
 			mode->hdisplay);
 
-	regmap_write(priv->regmap, MA35_HDISPLAY, reg); //FIXME
+	ma35_bringup_write(priv, MA35_HDISPLAY, reg, "MA35_HDISPLAY");
 	// ma35_reg_write_dbg(priv, MA35_HDISPLAY, reg, "HDISPLAY");
 	// ma35_reg_read_dbg(priv, MA35_HDISPLAY, "HDISPLAY readback");
 
@@ -357,13 +374,13 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		reg |= MA35_SYNC_POLARITY_BIT;
 	}
 
-	regmap_write(priv->regmap, MA35_HSYNC, reg);
+	ma35_bringup_write(priv, MA35_HSYNC, reg, "MA35_HSYNC");
 	// ma35_reg_write_dbg(priv, MA35_HSYNC, reg, "HSYNC");
 	// ma35_reg_read_dbg(priv, MA35_HSYNC, "HSYNC readback");
 
 	reg = FIELD_PREP(MA35_DISPLAY_TOTAL_MASK, mode->vtotal) |
 		FIELD_PREP(MA35_DISPLAY_ACTIVE_MASK, mode->vdisplay);
-	regmap_write(priv->regmap, MA35_VDISPLAY, reg);
+	ma35_bringup_write(priv, MA35_VDISPLAY, reg, "MA35_VDISPLAY");
 	// ma35_reg_write_dbg(priv, MA35_VDISPLAY, reg, "MA35_VDISPLAY");
 	// ma35_reg_read_dbg(priv, MA35_VDISPLAY, "MA35_VDISPLAY readback");
 
@@ -374,7 +391,7 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	if (mode->flags & DRM_MODE_FLAG_NVSYNC){
 		reg |= MA35_SYNC_POLARITY_BIT;
 	}
-	regmap_write(priv->regmap, MA35_VSYNC, reg);
+	ma35_bringup_write(priv, MA35_VSYNC, reg, "MA35_VSYNC");
 	// ma35_reg_write_dbg(priv, MA35_VSYNC, reg, "VSYNC");
 	// ma35_reg_read_dbg(priv, MA35_VSYNC, "VSYNC readback");
 
@@ -424,7 +441,7 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 
 	/* DPI format */
 	reg = FIELD_PREP(MA35_DPI_FORMAT_MASK, crtc->dpi_format);
-	regmap_write(priv->regmap, MA35_DPI_CONFIG, reg);
+	ma35_bringup_write(priv, MA35_DPI_CONFIG, reg, "MA35_DPI_CONFIG");
 
 	ma35_reg_read_dbg(priv, MA35_DPI_CONFIG, "DPI_CONFIG readback");
 
@@ -447,6 +464,7 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 
 	// DEBUG FOR NOW
 	// ma35_crtc_dump_regs(priv, "BEFORE vblank_on"); // remove later or check debug flag
+	ma35_bringup_dump(priv, "crtc-before-vblank-on");
 	drm_crtc_vblank_on(drm_crtc);
 	// ma35_crtc_dump_regs(priv, "AFTER vblank_on"); // remove later or check debug flag
 
@@ -457,6 +475,7 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	// ma35_reg_read_dbg(priv, MA35_DISPLAY_CURRENT_LOCATION, "CUR_LOC t2");
 
 	regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT, 5);
+	ma35_bringup_dump(priv, "crtc-enable-exit");
 	// ma35_reg_write_dbg(priv,
 	// 		MA35_DEBUG_COUNTER_SELECT, 5,
 	// 		"DEBUG_COUNTER_SELECT");
@@ -472,6 +491,7 @@ static void ma35_crtc_atomic_disable(struct drm_crtc *drm_crtc,
 	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
 	struct drm_device *drm_dev = drm_crtc->dev;
 
+	ma35_bringup_dump(priv, "crtc-disable-entry");
 	drm_crtc_vblank_off(drm_crtc);
 
 	/* Disable and clear CRTC bits. */
@@ -496,6 +516,9 @@ static void ma35_crtc_atomic_disable(struct drm_crtc *drm_crtc,
 static void ma35_crtc_atomic_flush(struct drm_crtc *drm_crtc,
 	struct drm_atomic_state *state)
 {
+	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
+
+	ma35_bringup_dump(priv, "crtc-flush-before-event");
 	spin_lock_irq(&drm_crtc->dev->event_lock);
 	if (drm_crtc->state->event) {
 		if (drm_crtc_vblank_get(drm_crtc) == 0){

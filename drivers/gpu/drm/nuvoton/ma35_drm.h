@@ -12,6 +12,7 @@
 #ifndef _MA35_DRM_H_
 #define _MA35_DRM_H_
 
+#include <linux/atomic.h>
 #include <linux/clk.h>
 #include <linux/list.h>
 #include <linux/regmap.h>
@@ -112,6 +113,7 @@ struct ma35_drm {
 	 * the CRTC, plane, and IRQ paths to access MA35_* registers.
 	 */
 	struct regmap *regmap;
+	atomic_t bringup_commits;
 
 	/*
 	 * List of MA35 hardware layers.
@@ -176,5 +178,10 @@ struct ma35_drm {
 	 */
 	struct reset_control *reset;
 };
+
+bool ma35_bringup_debug(struct ma35_drm *priv);
+void ma35_bringup_dump(struct ma35_drm *priv, const char *stage);
+void ma35_bringup_write(struct ma35_drm *priv, u32 reg, u32 val,
+			const char *name);
 
 #endif /* _MA35_DRM_H_ */
