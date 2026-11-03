@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 DTC_FLAGS += -p 4096
+# som35d1f-255.dtb 
 dtb-$(CONFIG_ARCH_MA35D1)    += som35d1f-255gs-7-inch.dtb \
 				som35d1f-255gs-10-inch.dtb \
 				som35d1f-ipac.dtb

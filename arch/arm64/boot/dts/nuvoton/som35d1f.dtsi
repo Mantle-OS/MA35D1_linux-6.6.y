@@ -51,8 +51,6 @@
 		regulator-always-on;
 	};
 
-
-	// hacky as fuck. I need to drive this pin high so that the "other" pins route to the right places in the mux -> gpiog
 	gpio_leds_test {
 		compatible = "gpio-leds";
 		pinctrl-names = "default";
@@ -73,17 +71,6 @@
 	reg = <0x00000000 0x80000000 0 0x20000000>;
 };
 
-// &crypto {
-// 	optee_nuvoton = "no";
-// };
-//
-// &key_store {
-// 	optee_nuvoton = "yes";
-// };
-//
-// &trng {
-// 	optee_nuvoton = "no";
-// };
 
 &gpioa {
 	gpio-line-names =
@@ -291,16 +278,12 @@
 	#clock-cells = <0>;
 };
 
-// The last rate is altered.
-// Why: setup for the display. because the diplay can not div by 3 and is 2 based .....
-// we change the dcu rate to get the clk to 33264 kHz.
-// see the datasheet for the panel
-// <102000000> was the default rate. It might be better to place this in the 255 at some point soon.
-// This needs to be tested to make sure that the clk does not mess with others . it shouldn't but further testing is needed
-&clk {
+&clk{
 	assigned-clock-rates = <1000000000>,
-		<266000000>, <196608000>,
-		<500000000>, <133056000>;
+						<266000000>,
+						<196608000>,
+						<500000000>,
+						<133056000>;
 };
 
 &spi0{
@@ -441,9 +424,9 @@
 	pinctrl-0 = <&pinctrl_ccap0>;
 	status = "disabled";
 };
-
+// 	compatible = "nuvoton,ma35d1-adc";
 &adc0 {
-	compatible = "nuvoton,ma35d1-adc";
+	compatible = "nuvoton,ma35-adc";
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_adc0>;
 	status = "okay";

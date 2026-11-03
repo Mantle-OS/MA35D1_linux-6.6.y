@@ -18,7 +18,9 @@
 #include <linux/regmap.h>
 #include <linux/types.h>
 #include <linux/pm_runtime.h>
+
 #include <linux/io.h>
+#include <linux/delay.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
@@ -32,80 +34,6 @@
 #include <drm/drm_vblank.h>
 
 #include "ma35_drm.h"
-
-/* Temporary serial bring-up tracing; zero disables it. No IRQ-path reads. */
-static unsigned int bringup_debug_commits = 8;
-module_param(bringup_debug_commits, uint, 0644);
-MODULE_PARM_DESC(bringup_debug_commits, "Trace the first N display commits (default 8; 0 disables)");
-
-/* Opt-in constant pixel source for a separately identified cold-boot test. */
-bool ma35_bringup_clear_test;
-module_param_named(bringup_clear_test, ma35_bringup_clear_test, bool, 0444);
-MODULE_PARM_DESC(bringup_clear_test, "Output opaque red from the primary clear register (default off)");
-
-bool ma35_bringup_debug(struct ma35_drm *priv)
-{
-	return bringup_debug_commits &&
-		(unsigned int)atomic_read(&priv->bringup_commits) <= bringup_debug_commits;
-}
-
-void ma35_bringup_write(struct ma35_drm *priv, u32 reg, u32 val,
-			const char *name)
-{
-	int ret = regmap_write(priv->regmap, reg, val);
-
-	if (ma35_bringup_debug(priv))
-		drm_info(&priv->drm_dev,
-			 "MA35-BRINGUP write %s off=%#x value=%#010x ret=%d\n",
-			 name, reg, val, ret);
-}
-
-void ma35_bringup_dump(struct ma35_drm *priv, const char *stage)
-{
-	static const struct {
-		u32 reg;
-		const char *name;
-	} regs[] = {
-		{ MA35_FRAMEBUFFER_CONFIG, "FB_CONFIG (UNDERFLOW clears on read)" },
-		{ MA35_FRAMEBUFFER_ADDRESS, "FB_ADDRESS" },
-		{ MA35_FRAMEBUFFER_SIZE, "FB_SIZE" },
-		{ MA35_FRAMEBUFFER_STRIDE, "FB_STRIDE" },
-		{ MA35_PANEL_CONFIG, "PANEL_CONFIG" },
-		{ MA35_DPI_CONFIG, "DPI_CONFIG" },
-		{ MA35_GENERAL_CONFIG, "GENERAL_CONFIG" },
-		{ MA35_HDISPLAY, "HDISPLAY" },
-		{ MA35_HSYNC, "HSYNC" },
-		{ MA35_VDISPLAY, "VDISPLAY" },
-		{ MA35_VSYNC, "VSYNC" },
-		{ MA35_DISPLAY_CURRENT_LOCATION, "LOCATION" },
-	};
-	u32 vals[ARRAY_SIZE(regs)] = { 0 };
-	int i, ret;
-
-	if (!ma35_bringup_debug(priv))
-		return;
-
-	/* INT_STATE acknowledges IRQs on read: leave it to the IRQ handler. */
-	for (i = 0; i < ARRAY_SIZE(regs); i++) {
-		ret = regmap_read(priv->regmap, regs[i].reg, &vals[i]);
-		if (ret)
-			drm_info(&priv->drm_dev, "MA35-BRINGUP %s read %s failed=%d\n",
-				 stage, regs[i].name, ret);
-	}
-	drm_info(&priv->drm_dev,
-		 "MA35-BRINGUP %s c=%d FB=%08x addr=%08x size=%08x stride=%u\n",
-		 stage, atomic_read(&priv->bringup_commits), vals[0], vals[1], vals[2], vals[3]);
-	drm_info(&priv->drm_dev,
-		 "MA35-BRINGUP output=%u pending=%u underflow=%u flip=%u clear=%u (UNDERFLOW clears on read; bit4 not interpreted)\n",
-		 !!(vals[0] & BIT(0)), !!(vals[0] & BIT(3)),
-		 !!(vals[0] & BIT(5)), !!(vals[0] & BIT(6)), !!(vals[0] & BIT(8)));
-	drm_info(&priv->drm_dev,
-		 "MA35-BRINGUP panel=%08x dpi=%08x general=%08x location=%08x\n",
-		 vals[4], vals[5], vals[6], vals[11]);
-	drm_info(&priv->drm_dev,
-		 "MA35-BRINGUP hdisplay=%08x hsync=%08x vdisplay=%08x vsync=%08x\n",
-		 vals[7], vals[8], vals[9], vals[10]);
-}
 
 DEFINE_DRM_GEM_DMA_FOPS(ma35_drm_fops);
 
@@ -132,6 +60,30 @@ static __maybe_unused void ma35_fbdev_backup_memory(struct ma35_drm *priv,
 							struct resource *res)
 {
 	regmap_write(priv->regmap, MA35_FRAMEBUFFER_ADDRESS, res->start);
+}
+
+static void ma35_drm_atomic_commit_tail(struct drm_atomic_state *state)
+{
+	struct drm_device *drm_dev = state->dev;
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: disables\n");
+	drm_atomic_helper_commit_modeset_disables(drm_dev, state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: enables\n");
+	drm_atomic_helper_commit_modeset_enables(drm_dev, state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: planes\n");
+	drm_atomic_helper_commit_planes(drm_dev, state,
+					DRM_PLANE_COMMIT_ACTIVE_ONLY);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: hw_done\n");
+	drm_atomic_helper_commit_hw_done(state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: wait_for_vblanks\n");
+	drm_atomic_helper_wait_for_vblanks(drm_dev, state);
+
+	// drm_info(drm_dev, "MA35 atomic commit tail: cleanup_planes\n");
+	drm_atomic_helper_cleanup_planes(drm_dev, state);
 }
 
 static struct drm_driver ma35_drm_driver = {
@@ -166,7 +118,7 @@ static irqreturn_t ma35_drm_irq_handler(int irq, void *data)
 	/* Get pending interrupt sources (RO). */
 	regmap_read(priv->regmap, MA35_INT_STATE, &stat);
 
-	// drm_info(drm_dev, "IRQ: MA35_INT_STATE=0x%08x\n", stat);
+	drm_info(drm_dev, "IRQ: MA35_INT_STATE=0x%08x\n", stat);
 
 	if (stat & MA35_INT_STATE_DISP0) {
 		ma35_crtc_vblank_handler(priv);
@@ -181,35 +133,6 @@ static const struct drm_mode_config_funcs ma35_mode_config_funcs = {
 	.atomic_check		= drm_atomic_helper_check,
 	.atomic_commit		= drm_atomic_helper_commit,
 };
-
-static void ma35_drm_atomic_commit_tail(struct drm_atomic_state *state)
-{
-	struct drm_device *drm_dev = state->dev;
-	struct ma35_drm *priv = ma35_drm(drm_dev);
-	int seq = atomic_inc_return(&priv->bringup_commits);
-	bool trace = ma35_bringup_debug(priv);
-
-	if (trace)
-		drm_info(drm_dev, "MA35-BRINGUP commit=%d state=%p begin\n", seq, state);
-	ma35_bringup_dump(priv, "tail-before-disables");
-	drm_atomic_helper_commit_modeset_disables(drm_dev, state);
-	ma35_bringup_dump(priv, "tail-after-disables");
-	drm_atomic_helper_commit_modeset_enables(drm_dev, state);
-	ma35_bringup_dump(priv, "tail-after-enables");
-	drm_atomic_helper_commit_planes(drm_dev, state,
-					DRM_PLANE_COMMIT_ACTIVE_ONLY);
-	ma35_bringup_dump(priv, "tail-after-planes");
-	drm_atomic_helper_commit_hw_done(state);
-	if (trace)
-		drm_info(drm_dev, "MA35-BRINGUP commit=%d wait-for-vblanks begin\n", seq);
-	drm_atomic_helper_wait_for_vblanks(drm_dev, state);
-	if (trace)
-		drm_info(drm_dev, "MA35-BRINGUP commit=%d wait-for-vblanks returned\n", seq);
-	ma35_bringup_dump(priv, "tail-after-vblank-wait");
-	drm_atomic_helper_cleanup_planes(drm_dev, state);
-	if (trace)
-		drm_info(drm_dev, "MA35-BRINGUP commit=%d end\n", seq);
-}
 
 static const struct drm_mode_config_helper_funcs ma35_mode_config_helper_funcs = {
 	.atomic_commit_tail = ma35_drm_atomic_commit_tail,
@@ -233,7 +156,7 @@ static int ma35_mode_init(struct ma35_drm *priv)
 		drm_err(drm_dev, "Failed to initialize vblank\n");
 		return ret;
 	}
-	// TODO Revisit this
+
 	mode_config->min_width = 32;
 	mode_config->max_width = 1920;
 	mode_config->min_height = 1;
@@ -250,6 +173,7 @@ static int ma35_mode_init(struct ma35_drm *priv)
 static void ma35_mode_fini(struct ma35_drm *priv)
 {
 	struct drm_device *drm_dev = &priv->drm_dev;
+
 	drm_kms_helper_poll_fini(drm_dev);
 }
 
@@ -299,31 +223,17 @@ static int ma35_clocks_prepare(struct ma35_drm *priv)
 		return ret;
 	}
 
-	// dev_info(dev, "dcu_clk = epll/2 = %ld Hz\n", clk_get_rate(priv->dcuclk));
-
 	priv->dcupclk = devm_clk_get(dev, "dcup_div");
 	if (IS_ERR(priv->dcupclk)) {
 		dev_err(dev, "Failed to get display pixel clock dcup_div\n");
 		return PTR_ERR(priv->dcupclk);
 	}
 
-	// dev_info(dev,
-	// 	"dcuclk rate: %lu Hz\n",
-	// 	clk_get_rate(priv->dcuclk));
- //
-	// dev_info(dev,
-	// 	"dcupclk rate before enable: %lu Hz\n",
-	// 	clk_get_rate(priv->dcupclk));
-
 	ret = clk_prepare_enable(priv->dcupclk);
 	if (ret) {
 		dev_err(dev, "Failed to enable display pixel clock dcupclk\n");
 		return ret;
 	}
-
-	// dev_info(dev,
-	// 	"dcupclk rate after enable: %lu Hz\n",
-	// 	clk_get_rate(priv->dcupclk));
 
 	return 0;
 }
@@ -368,8 +278,6 @@ static int ma35_reset_deassert(struct ma35_drm *priv)
 	// drm_info(drm_dev, "Asserting display reset\n");
 
 	ret = reset_control_assert(priv->reset);
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev, "MA35-BRINGUP reset assert ret=%d\n", ret);
 	if (ret) {
 		drm_err(drm_dev, "Failed to assert display reset: %d\n", ret);
 		return ret;
@@ -380,8 +288,6 @@ static int ma35_reset_deassert(struct ma35_drm *priv)
 	// drm_info(drm_dev, "Deasserting display reset\n");
 
 	ret = reset_control_deassert(priv->reset);
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev, "MA35-BRINGUP reset deassert ret=%d\n", ret);
 	if (ret) {
 		drm_err(drm_dev, "Failed to deassert display reset: %d\n", ret);
 		return ret;
@@ -389,7 +295,7 @@ static int ma35_reset_deassert(struct ma35_drm *priv)
 
 	udelay(10);
 
-	// drm_info(drm_dev, "Display reset pulse complete\n");
+	drm_info(drm_dev, "Display reset pulse complete\n");
 
 	return 0;
 }
@@ -400,25 +306,25 @@ static void ma35_drm_apply_software_reset(struct ma35_drm *priv,
 {
 	struct drm_device *drm_dev = &priv->drm_dev;
 
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev, "MA35-BRINGUP software reset: FB_CONFIG=0x10, 10us, FB_CONFIG=0\n");
+	drm_info(drm_dev, "Applying display framebuffer-config software reset\n");
 
-	writel(MA35_FRAMEBUFFER_RESET_ENABLE,
-		base + MA35_FRAMEBUFFER_CONFIG);
+	writel(MA35_FRAMEBUFFER_RESET_ENABLE, base + MA35_FRAMEBUFFER_CONFIG);
 
 	udelay(10);
 
-	writel(MA35_FRAMEBUFFER_RESET_DISABLE,
-		base + MA35_FRAMEBUFFER_CONFIG);
+	writel(MA35_FRAMEBUFFER_RESET_DISABLE, base + MA35_FRAMEBUFFER_CONFIG);
 
-	// drm_info(drm_dev,
-	// 	"RAW MMIO after framebuffer software reset: 0000=%08x 0004=%08x 0020=%08x 00a8=%08x 1518=%08x 1418=%08x\n",
-	// 	readl(base + 0x0000),
-	// 	readl(base + 0x0004),
-	// 	readl(base + 0x0020),
-	// 	readl(base + 0x00a8),
-	// 	readl(base + MA35_FRAMEBUFFER_CONFIG),
-	// 	readl(base + MA35_PANEL_CONFIG));
+	/* Flush the posted MMIO write before reading back registers. */
+	readl(base + MA35_FRAMEBUFFER_CONFIG);
+
+	drm_info(drm_dev,
+		"RAW MMIO after framebuffer software reset: 0000=%08x 0004=%08x 0020=%08x 00a8=%08x 1518=%08x 1418=%08x\n",
+		readl(base + 0x0000),
+		readl(base + 0x0004),
+		readl(base + 0x0020),
+		readl(base + 0x00a8),
+		readl(base + MA35_FRAMEBUFFER_CONFIG),
+		readl(base + MA35_PANEL_CONFIG));
 }
 
 
@@ -446,7 +352,7 @@ static int ma35_drm_probe(struct platform_device *pdev)
 			return ret;
 		}
 		of_node_put(mem_node);
-		// dev_info(dev, "registering reserved memory %pR\n", &res);
+		dev_info(dev, "registering reserved memory %pR\n", &res);
 
 		/* This function assigns respective DMA-mapping operations
 		 * to the device, so that it can use the reserved memory region
@@ -490,8 +396,6 @@ static int ma35_drm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, priv);
 	drm_dev = &priv->drm_dev;
 	priv->regmap = regmap;
-	priv->irq = irq;
-	atomic_set(&priv->bringup_commits, 0);
 	INIT_LIST_HEAD(&priv->layers_list);
 
 	ret = ma35_clocks_prepare(priv);
@@ -499,8 +403,6 @@ static int ma35_drm_probe(struct platform_device *pdev)
 		drm_err(drm_dev, "Failed to prepare clocks\n");
 		goto error_reserved_mem;
 	}
-
-	ma35_bringup_dump(priv, "probe-before-reset");
 
 	// NEW add reset controller
 	ret = ma35_reset_deassert(priv);
@@ -511,7 +413,8 @@ static int ma35_drm_probe(struct platform_device *pdev)
 
 	// NEW software reset
 	ma35_drm_apply_software_reset(priv, base);
-	ma35_bringup_dump(priv, "probe-after-resets");
+	// END NEW software reset
+
 
 	ret = devm_request_irq(dev, irq, ma35_drm_irq_handler, 0,
 				dev_name(dev), priv);
@@ -579,11 +482,7 @@ static int ma35_drm_probe(struct platform_device *pdev)
 #ifdef CONFIG_DRM_FBDEV_EMULATION
 	if (mem_node) {
 		drm_fbdev_generic_setup(drm_dev, preferred_bpp);
-		ma35_bringup_dump(priv, "probe-after-fbdev-before-backup");
-		if (ma35_bringup_debug(priv))
-			drm_info(drm_dev, "MA35-BRINGUP backup address=%pa\n", &res.start);
 		ma35_fbdev_backup_memory(priv, &res);
-		ma35_bringup_dump(priv, "probe-after-backup");
 	} else {
 		dev_dbg(dev, "Reserved memory node not present. Driver will try dynamic allocation\n");
 	}
@@ -717,7 +616,7 @@ static struct platform_driver ma35_drm_platform_driver = {
 };
 
 /* remove the platform call and use late_initcall */
-// module_platform_driver(ma35_drm_platform_driver);
+/* module_platform_driver(ma35_drm_platform_driver); */
 static int __init ma35_drm_init(void) {
 	return platform_driver_register(&ma35_drm_platform_driver);
 }

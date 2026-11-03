@@ -20,8 +20,6 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_gem_dma_helper.h>
-#include <drm/drm_fb_dma_helper.h>
-#include <drm/drm_framebuffer.h>
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
 
@@ -79,101 +77,8 @@ ma35_crtc_mode_valid(struct drm_crtc *drm_crtc,
 	return MODE_OK;
 }
 
-static void ma35_reg_write_dbg(struct ma35_drm *priv, u32 reg, u32 val, const char *name)
-{
-	struct drm_device *drm_dev = &priv->drm_dev;
-	int ret;
-
-	ret = regmap_write(priv->regmap, reg, val);
-	drm_info(drm_dev, "REG WRITE %-24s off=0x%04x val=0x%08x ret=%d\n",
-			name, reg, val, ret);
-}
-
-static u32 ma35_reg_read_dbg(struct ma35_drm *priv, u32 reg, const char *name)
-{
-	struct drm_device *drm_dev = &priv->drm_dev;
-	u32 val = 0xdeadbeef;
-	int ret;
-
-	ret = regmap_read(priv->regmap, reg, &val);
-	drm_info(drm_dev, "REG READ  %-24s off=0x%04x val=0x%08x ret=%d\n",
-			name, reg, val, ret);
-
-	return val;
-}
-
-static void ma35_crtc_dump_regs(struct ma35_drm *priv, const char *tag)
-{
-	struct drm_device *drm_dev = &priv->drm_dev;
-	u32 panel_config;
-	u32 hdisplay;
-	u32 hsync;
-	u32 vdisplay;
-	u32 vsync;
-	u32 current_location;
-	u32 int_state;
-	u32 intr_enable;
-	u32 dpi_config;
-	u32 fb_config;
-	u32 fb_addr;
-	u32 fb_size;
-	u32 fb_stride;
-
-	// information
-	u32 chip_id;
-	u32 chip_rev;
-	u32 chip_date;
-	u32 chip_time;
-	u32 customer_id;
-	u32 product_id;
-
-	panel_config = ma35_reg_read_dbg(priv, MA35_PANEL_CONFIG, "PANEL_CONFIG");
-	hdisplay = ma35_reg_read_dbg(priv, MA35_HDISPLAY, "HDISPLAY");
-	hsync = ma35_reg_read_dbg(priv, MA35_HSYNC, "HSYNC");
-	vdisplay = ma35_reg_read_dbg(priv, MA35_VDISPLAY, "VDISPLAY");
-	vsync = ma35_reg_read_dbg(priv, MA35_VSYNC, "VSYNC");
-	current_location = ma35_reg_read_dbg(priv, MA35_DISPLAY_CURRENT_LOCATION, "CURRENT_LOCATION");
-	int_state = ma35_reg_read_dbg(priv, MA35_INT_STATE, "INT_STATE");
-	intr_enable = ma35_reg_read_dbg(priv, MA35_DISPLAY_INTRENABLE, "DISPLAY_INTRENABLE");
-	dpi_config = ma35_reg_read_dbg(priv, MA35_DPI_CONFIG, "DPI_CONFIG");
-	fb_config = ma35_reg_read_dbg(priv, MA35_FRAMEBUFFER_CONFIG, "FB_CONFIG");
-	fb_addr = ma35_reg_read_dbg(priv, MA35_FRAMEBUFFER_ADDRESS, "FB_ADDR");
-	fb_size = ma35_reg_read_dbg(priv, MA35_FRAMEBUFFER_SIZE, "FB_SIZE");
-	fb_stride = ma35_reg_read_dbg(priv, MA35_FRAMEBUFFER_STRIDE, "FB_STRIDE");
-
-	// information
-	chip_id =  ma35_reg_read_dbg(priv, MA35_GC_CHIP_ID, "GC_CHIP_ID");
-	chip_rev = ma35_reg_read_dbg(priv, MA35_GC_CHIP_REV, "GC_CHIP_REV");
-	chip_date = ma35_reg_read_dbg(priv, MA35_GC_CHIP_DATE, "GC_CHIP_DATE");
-	chip_time = ma35_reg_read_dbg(priv, MA35_GC_CHIP_TIME, "GC_CHIP_TIME");
-	customer_id = ma35_reg_read_dbg(priv, MA35_GC_CUSTOMER_ID, "GC_CUSTOMER_ID");
-	product_id = ma35_reg_read_dbg(priv, MA35_GC_PRODUCT_ID, "GC_PRODUCT_ID");
-
-	//  debug
-	drm_dbg(drm_dev,
-		"%s: GC_CHIP_ID=0x%08x GC_CHIP_REV=0x%08x GC_CHIP_DATE=0x%08x GC_CHIP_TIME=0x%08x GC_CUSTOMER_ID=0x%08x GC_PRODUCT_ID=0x%08x\n",
-		tag, chip_id, chip_rev, chip_date, chip_time, customer_id, product_id);
-
-	drm_dbg(drm_dev,
-		"%s: PANEL_CONFIG=0x%08x DPI_CONFIG=0x%08x\n",
-		tag, panel_config, dpi_config);
-
-	drm_dbg(drm_dev,
-		"%s: HDISPLAY=0x%08x HSYNC=0x%08x VDISPLAY=0x%08x VSYNC=0x%08x\n",
-		tag, hdisplay, hsync, vdisplay, vsync);
-
-	drm_dbg(drm_dev,
-		"%s: CURRENT_LOCATION=0x%08x INT_STATE=0x%08x INTRENABLE=0x%08x\n",
-		tag, current_location, int_state, intr_enable);
-
-	drm_dbg(drm_dev,
-		"%s: FB_CONFIG=0x%08x FB_ADDR=0x%08x FB_SIZE=0x%08x FB_STRIDE=0x%08x\n",
-		tag, fb_config, fb_addr, fb_size, fb_stride);
-
-}
-
 static int ma35_crtc_atomic_check(struct drm_crtc *drm_crtc,
-									struct drm_atomic_state *state)
+					 struct drm_atomic_state *state)
 {
 	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
 	struct drm_crtc_state *crtc_state;
@@ -189,6 +94,7 @@ static int ma35_crtc_atomic_check(struct drm_crtc *drm_crtc,
 		return MODE_CLOCK_HIGH;
 	}
 
+	// check rounded pixel clock
 	clk_rate = clk_round_rate(priv->dcupclk, mode->clock * 1000);
 	if (clk_rate <= 0){
 		return MODE_CLOCK_RANGE;
@@ -214,7 +120,8 @@ static u32 ma35_crtc_get_bus_flags(struct ma35_drm *priv,
 
 	if (!bus_flags) {
 		drm_info(drm_dev, "No connector bus_flags; using temporary fallback\n");
-		bus_flags = DRM_BUS_FLAG_DE_HIGH;
+		bus_flags = DRM_BUS_FLAG_DE_HIGH |
+			DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
 	}
 
 	drm_dbg(drm_dev,
@@ -246,18 +153,17 @@ static void ma35_crtc_program_panel_config(struct ma35_drm *priv,
 	}
 
 	/*
-	 * PANEL_CONFIG[5] inverts RGB pin levels; it is not a pixel launch edge
-	 * selector. Keep data non-inverted. Clock polarity is a separate field
-	 * and remains positive for the measured SOM-255 7-inch configuration.
+	 * SN65LVDS84AQ loads input data on CLKIN falling edge.
+	 * During bring-up, SOM-255 may force PIXDATA_DRIVE_NEGEDGE until
+	 * bridge/panel bus flag propagation is verified.
 	 */
+	if (bus_flags & DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE){
+		reg |= MA35_PANEL_DATA_POLARITY;
+	}
 
-	priv->startup_panel_config = reg;
-	ma35_bringup_write(priv, MA35_PANEL_CONFIG, 0, "PANEL_CONFIG held disabled");
-	// ma35_reg_write_dbg(priv, MA35_PANEL_CONFIG, reg, "PANEL_CONFIG");
-	ma35_reg_read_dbg(priv, MA35_PANEL_CONFIG, "PANEL_CONFIG readback");
+	regmap_write(priv->regmap, MA35_PANEL_CONFIG, reg);
 
-
-	drm_dbg(drm_dev, "MA35_PANEL_CONFIG pending encoder enable: 0x%08x\n", reg);
+	drm_dbg(drm_dev, "MA35_PANEL_CONFIG programmed: 0x%08x\n", reg);
 }
 
 static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
@@ -265,17 +171,6 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 {
 	struct ma35_crtc *crtc = ma35_crtc(drm_crtc);
 	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
-	static const u32 address_regs[] = {
-		MA35_FRAMEBUFFER_ADDRESS, MA35_FRAMEBUFFER_UPLANAR_ADDRESS,
-		MA35_FRAMEBUFFER_VPLANAR_ADDRESS,
-	};
-	static const u32 stride_regs[] = {
-		MA35_FRAMEBUFFER_STRIDE, MA35_FRAMEBUFFER_USTRIDE,
-		MA35_FRAMEBUFFER_VSTRIDE,
-	};
-	struct drm_plane_state *primary_state;
-	struct drm_framebuffer *fb;
-	struct ma35_layer *primary;
 	struct drm_crtc_state *new_state;
 	struct drm_display_mode *mode;
 	struct drm_color_lut *lut;
@@ -284,14 +179,11 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	struct drm_display_info *display_info = NULL;
 	struct drm_device *drm_dev = &priv->drm_dev;
 	u32 bus_flags;
-	u32 reg, format, bpp;
-	u32 fb_config = MA35_PRIMARY_RESET;
-	dma_addr_t dma;
-	int i, size, ret;
+	u32 reg;
+	int i, size;
 
 	new_state = drm_atomic_get_new_crtc_state(state, drm_crtc);
 	mode = &new_state->adjusted_mode;
-	priv->startup_prepared = false;
 
 	connector = priv->interface ? priv->interface->connector : NULL;
 	bridge = priv->interface ? priv->interface->bridge : NULL;
@@ -300,48 +192,35 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		display_info = &connector->display_info;
 	}
 
-	ma35_bringup_dump(priv, "crtc-enable-entry");
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev, "MA35-BRINGUP CRTC enable state=%p core=%lu pixel=%lu gamma=%u dither=%u dpi=%u\n",
-			 state, clk_get_rate(priv->dcuclk), clk_get_rate(priv->dcupclk),
-			 !!new_state->gamma_lut, crtc->dither_enable, crtc->dpi_format);
-
 	/* --- Timing / connector debug --- */
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev, "CRTC ENABLE: Mode Name: %s, Clock: %d KHz\n",
+	drm_dbg(drm_dev, "CRTC ENABLE: Mode Name: %s, Clock: %d KHz\n",
 			 mode->name, mode->clock);
 
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev,
+	drm_dbg(drm_dev,
 			"HTOTAL: %d, HACTIVE: %d, HSYNC_START: %d, HSYNC_END: %d\n",
 			mode->htotal, mode->hdisplay, mode->hsync_start,
 			mode->hsync_end);
 
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev,
+	drm_dbg(drm_dev,
 			"VTOTAL: %d, VACTIVE: %d, VSYNC_START: %d, VSYNC_END: %d\n",
 			mode->vtotal, mode->vdisplay, mode->vsync_start,
 			mode->vsync_end);
 
-	if (ma35_bringup_debug(priv))
-		drm_info(drm_dev,
+	drm_dbg(drm_dev,
 			"Mode Flags: 0x%x (NHSYNC: %s, NVSYNC: %s)\n", mode->flags,
 			(mode->flags & DRM_MODE_FLAG_NHSYNC) ? "yes" : "no",
 			(mode->flags & DRM_MODE_FLAG_NVSYNC) ? "yes" : "no");
 
 	if (connector) {
-		if (ma35_bringup_debug(priv))
-			drm_info(drm_dev, "Connector Name: %s, Connector Type: %d\n",
+		drm_dbg(drm_dev, "Connector Name: %s, Connector Type: %d\n",
 			connector->name, connector->connector_type);
 
-		if (ma35_bringup_debug(priv))
-			drm_info(drm_dev,
+		drm_dbg(drm_dev,
 			"Connector display_info: bus_flags=0x%x, num_bus_formats=%u, bpc=%u\n",
 			display_info->bus_flags, display_info->num_bus_formats, display_info->bpc);
 
 		for (i = 0; i < display_info->num_bus_formats; i++){
-			if (ma35_bringup_debug(priv))
-				drm_info(drm_dev,
+			drm_dbg(drm_dev,
 				"Connector bus_format[%d] = 0x%x\n",
 				i, display_info->bus_formats[i]);
 		}
@@ -349,75 +228,31 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		drm_info(drm_dev, "Connector missing from MA35 interface\n");
 	}
 
+	/* --- Both BRIDGE DEEP DIVE --- */
 	if (bridge) {
-		if (ma35_bringup_debug(priv))
-			drm_info(drm_dev,
+		drm_dbg(drm_dev,
 			"First Bridge: Name: %s, Type: %d\n",
 			bridge->of_node ? bridge->of_node->name : "unknown", bridge->type);
 
 		if (bridge->timings) {
-			if (ma35_bringup_debug(priv))
-				drm_info(drm_dev,
+			drm_dbg(drm_dev,
 				"First Bridge timings: input_flags=0x%x, setup=%u ps, hold=%u ps\n",
 				bridge->timings->input_bus_flags, bridge->timings->setup_time_ps, bridge->timings->hold_time_ps);
 		} else {
-			if (ma35_bringup_debug(priv))
-				drm_info(drm_dev,
+			drm_dbg(drm_dev,
 				"First Bridge: No static timings defined\n");
 		}
 	} else {
-		if (ma35_bringup_debug(priv))
-			drm_info(drm_dev,
+		drm_dbg(drm_dev,
 			"First Bridge missing from MA35 interface\n");
 	}
-
-	/*
-	 * The custom tail enables the CRTC before updating planes. Prepare the
-	 * initial primary working set here, with timing held stopped (bit 4=0).
-	 * The encoder starts it after the bridge chain prepares panel power.
-	 * Leave the later plane callback intact for this bring-up experiment.
-	 */
-	primary_state = drm_atomic_get_new_plane_state(state, drm_crtc->primary);
-	if (!primary_state)
-		primary_state = drm_crtc->primary->state;
-	fb = primary_state->fb;
-	primary = container_of(drm_crtc->primary, struct ma35_layer, drm_plane);
-
-	if (fb) {
-		if (fb->format->num_planes > ARRAY_SIZE(address_regs)) {
-			drm_err(drm_dev, "MA35-INIT unsupported primary plane count %u\n",
-				fb->format->num_planes);
-			return;
-		}
-		ret = ma35_layer_format_validate(fb->format->format, &format, &bpp);
-		if (ret) {
-			drm_err(drm_dev, "MA35-INIT invalid primary fourcc=%#x ret=%d\n",
-				fb->format->format, ret);
-			return;
-		}
-		fb_config |= FIELD_PREP(MA35_PRIMARY_FORMAT_MASK, format) |
-			FIELD_PREP(MA35_PRIMARY_SWIZZLE_MASK, primary->config.swizzle) |
-			MA35_PRIMARY_ENABLE;
-		if (primary->config.colorkeylo || primary->config.colorkeyup)
-			fb_config |= FIELD_PREP(MA35_PRIMARY_TRANSPARENCY_MASK,
-					MA35_COLORKEY_ENABLE);
-	}
-	if (new_state->gamma_lut)
-		fb_config |= MA35_PRIMARY_GAMMA;
-
-	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, 0);
-	drm_info(drm_dev, "MA35-INIT hold timing stopped FB_CONFIG=0 ret=%d\n", ret);
-	if (ret)
-		return;
 
 	/* Timings */
 	reg = FIELD_PREP(MA35_DISPLAY_TOTAL_MASK,
 			mode->htotal) | FIELD_PREP(MA35_DISPLAY_ACTIVE_MASK,
 			mode->hdisplay);
 
-	ma35_bringup_write(priv, MA35_HDISPLAY, reg, "MA35_HDISPLAY");
-	// ma35_reg_write_dbg(priv, MA35_HDISPLAY, reg, "HDISPLAY");
-	// ma35_reg_read_dbg(priv, MA35_HDISPLAY, "HDISPLAY readback");
+	regmap_write(priv->regmap, MA35_HDISPLAY, reg); //FIXME
 
 	reg = MA35_SYNC_PULSE_ENABLE |
 		FIELD_PREP(MA35_SYNC_START_MASK, mode->hsync_start) |
@@ -427,15 +262,11 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		reg |= MA35_SYNC_POLARITY_BIT;
 	}
 
-	ma35_bringup_write(priv, MA35_HSYNC, reg, "MA35_HSYNC");
-	// ma35_reg_write_dbg(priv, MA35_HSYNC, reg, "HSYNC");
-	// ma35_reg_read_dbg(priv, MA35_HSYNC, "HSYNC readback");
+	regmap_write(priv->regmap, MA35_HSYNC, reg);
 
 	reg = FIELD_PREP(MA35_DISPLAY_TOTAL_MASK, mode->vtotal) |
 		FIELD_PREP(MA35_DISPLAY_ACTIVE_MASK, mode->vdisplay);
-	ma35_bringup_write(priv, MA35_VDISPLAY, reg, "MA35_VDISPLAY");
-	// ma35_reg_write_dbg(priv, MA35_VDISPLAY, reg, "MA35_VDISPLAY");
-	// ma35_reg_read_dbg(priv, MA35_VDISPLAY, "MA35_VDISPLAY readback");
+	regmap_write(priv->regmap, MA35_VDISPLAY, reg);
 
 	reg = MA35_SYNC_PULSE_ENABLE |
 		FIELD_PREP(MA35_SYNC_START_MASK, mode->vsync_start) |
@@ -444,34 +275,22 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	if (mode->flags & DRM_MODE_FLAG_NVSYNC){
 		reg |= MA35_SYNC_POLARITY_BIT;
 	}
-	ma35_bringup_write(priv, MA35_VSYNC, reg, "MA35_VSYNC");
-	// ma35_reg_write_dbg(priv, MA35_VSYNC, reg, "VSYNC");
-	// ma35_reg_read_dbg(priv, MA35_VSYNC, "VSYNC readback");
+	regmap_write(priv->regmap, MA35_VSYNC, reg);
 
 	/* Signals */
 	bus_flags = ma35_crtc_get_bus_flags(priv, connector);
-
-	drm_info(drm_dev, "MA35-INIT connector bus_flags=0x%x; RGB data non-inverted\n",
-		 bus_flags);
-
 	ma35_crtc_program_panel_config(priv, bus_flags);
-
-
 
 	/* Gamma */
 	if (new_state->gamma_lut) {
 		if (new_state->color_mgmt_changed) {
 			lut = new_state->gamma_lut->data;
-			size = new_state->gamma_lut->length /
-			sizeof(struct drm_color_lut);
+			size = new_state->gamma_lut->length / sizeof(struct drm_color_lut);
 
 			for (i = 0; i < size; i++) {
-				regmap_write(priv->regmap, MA35_GAMMA_INDEX, i);
-				/*
-				 * Shift DRM gamma 16-bit values to the MA35
-				 * 10-bit gamma fields.
-				 */
-				reg = 	FIELD_PREP(MA35_GAMMA_RED_MASK, lut[i].red >> 6) |
+				regmap_write(priv->regmap, MA35_GAMMA_INDEX, i); // auto increment in spec though
+				// shift DRM gamma 16-bit values to 10-bit
+				reg = FIELD_PREP(MA35_GAMMA_RED_MASK, lut[i].red >> 6) |
 						FIELD_PREP(MA35_GAMMA_GREEN_MASK, lut[i].green >> 6) |
 						FIELD_PREP(MA35_GAMMA_BLUE_MASK, lut[i].blue >> 6);
 
@@ -494,72 +313,26 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 
 	/* DPI format */
 	reg = FIELD_PREP(MA35_DPI_FORMAT_MASK, crtc->dpi_format);
-	ma35_bringup_write(priv, MA35_DPI_CONFIG, reg, "MA35_DPI_CONFIG");
-
-	ma35_reg_read_dbg(priv, MA35_DPI_CONFIG, "DPI_CONFIG readback");
-
-	drm_info(drm_dev,
-		"MA35_DPI_CONFIG programmed: 0x%08x, dpi_format=%u\n",
-		reg, crtc->dpi_format);
+	regmap_write(priv->regmap, MA35_DPI_CONFIG, reg);
+	drm_info(drm_dev, "MA35_DPI_CONFIG programmed: 0x%08x, dpi_format=%u\n", reg, crtc->dpi_format);
 
 	/* Dither */
 	if (crtc->dither_enable) {
-		for (i = 0, reg = 0; i < MA35_DITHER_TABLE_ENTRY / 2; i++){
+		for (i = 0, reg = 0; i < MA35_DITHER_TABLE_ENTRY / 2; i++) {
 			reg |= (crtc->dither_depth & MA35_DITHER_TABLE_MASK) << (i * 4);
 		}
 
 		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_TABLE_LOW, reg);
 		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_TABLE_HIGH, reg);
-		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_CONFIG, MA35_DITHER_ENABLE);
+		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_CONFIG,
+					 MA35_DITHER_ENABLE);
 	} else {
 		regmap_write(priv->regmap, MA35_DISPLAY_DITHER_CONFIG, 0);
 	}
 
-	/* Primary dimensions, pitches and DMA addresses precede the start write. */
-	if (fb) {
-		reg = FIELD_PREP(MA35_LAYER_FB_HEIGHT, fb->height) |
-			FIELD_PREP(MA35_LAYER_FB_WIDTH, fb->width);
-		ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_SIZE, reg);
-		drm_info(drm_dev, "MA35-INIT primary size=%ux%u value=%#010x ret=%d\n",
-			fb->width, fb->height, reg, ret);
-		if (ret)
-			goto primary_init_failed;
-		for (i = 0; i < fb->format->num_planes; i++) {
-			dma = drm_fb_dma_get_gem_addr(fb, primary_state, i);
-			ret = regmap_write(priv->regmap, stride_regs[i], fb->pitches[i]);
-			if (ret)
-				goto primary_init_failed;
-			ret = regmap_write(priv->regmap, address_regs[i], dma);
-			drm_info(drm_dev,
-				 "MA35-INIT primary[%d] dma=%pad pitch=%u offset=%u ret=%d\n",
-				 i, &dma, fb->pitches[i], fb->offsets[i], ret);
-			if (ret)
-				goto primary_init_failed;
-		}
-	}
-	if (ma35_bringup_clear_test && fb) {
-		ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CLEARVALUE, 0xffff0000);
-		if (ret)
-			goto primary_init_failed;
-		fb_config |= MA35_PRIMARY_CLEAR;
-		drm_info(drm_dev, "MA35-TEST opaque-red pixel source enabled at startup\n");
-	}
-	/* Keep bit 4 clear until bridge pre-enable has prepared panel power. */
-	reg = fb_config & ~MA35_PRIMARY_RESET;
-	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, reg);
-	drm_info(drm_dev,
-		 "MA35-INIT prepared primary=%u FB_CONFIG=%#010x; output held for encoder enable ret=%d\n",
-		 !!fb, reg, ret);
-	if (ret)
-		goto primary_init_failed;
-	priv->startup_fb_config = fb_config;
-	priv->startup_prepared = true;
-	ma35_bringup_dump(priv, "crtc-prepared-output-stopped");
+	drm_crtc_vblank_on(drm_crtc);
 
-	return;
-
-primary_init_failed:
-	drm_err(drm_dev, "MA35-INIT primary initialization failed ret=%d\n", ret);
+	regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT, 5);
 
 }
 
@@ -569,7 +342,7 @@ static void ma35_crtc_atomic_disable(struct drm_crtc *drm_crtc,
 	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
 	struct drm_device *drm_dev = drm_crtc->dev;
 
-	ma35_bringup_dump(priv, "crtc-disable-entry");
+	drm_crtc_vblank_off(drm_crtc);
 
 	/* Disable and clear CRTC bits. */
 	regmap_update_bits(priv->regmap, MA35_PANEL_CONFIG,
@@ -593,9 +366,6 @@ static void ma35_crtc_atomic_disable(struct drm_crtc *drm_crtc,
 static void ma35_crtc_atomic_flush(struct drm_crtc *drm_crtc,
 	struct drm_atomic_state *state)
 {
-	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
-
-	ma35_bringup_dump(priv, "crtc-flush-before-event");
 	spin_lock_irq(&drm_crtc->dev->event_lock);
 	if (drm_crtc->state->event) {
 		if (drm_crtc_vblank_get(drm_crtc) == 0){
@@ -648,13 +418,8 @@ static int ma35_crtc_enable_vblank(struct drm_crtc *drm_crtc)
 {
 	struct ma35_drm *priv = ma35_drm(drm_crtc->dev);
 
-	// ma35_crtc_dump_regs(priv, "enable_vblank BEFORE");
-
 	regmap_write(priv->regmap, MA35_DISPLAY_INTRENABLE, MA35_CRTC_VBLANK);
-	// ma35_reg_write_dbg(priv, MA35_DISPLAY_INTRENABLE, MA35_CRTC_VBLANK, "DISPLAY_INTRENABLE");
-	// ma35_reg_read_dbg(priv, MA35_DISPLAY_INTRENABLE, "DISPLAY_INTRENABLE readback");
 
-	// ma35_crtc_dump_regs(priv, "enable_vblank AFTER");
 	return 0;
 }
 
@@ -767,8 +532,6 @@ void ma35_crtc_vblank_handler(struct ma35_drm *priv)
 		return;
 	}
 
-	// ma35_crtc_dump_regs(priv, "vblank irq");
-
 	spin_lock(&crtc->vblank_lock);
 	crtc->vblank_counter++;
 	spin_unlock(&crtc->vblank_lock);
@@ -809,7 +572,7 @@ static int ma35_crtc_create_properties(struct ma35_drm *priv)
 
 	drm_object_attach_property(&drm_crtc->base, crtc->dpi_format_prop, dpi_format_val);
 	crtc->dpi_format = dpi_format_val;
-	drm_dbg(drm_dev, "CRTC DPI format initialized to: %u\n", dpi_format_val);
+	drm_info(drm_dev, "CRTC DPI format initialized to: %u\n", dpi_format_val);
 
 	/* Dither Enable  */
 	crtc->dither_enable_prop = drm_property_create_bool(drm_dev, 0, "dither-enable");
@@ -887,6 +650,7 @@ int ma35_crtc_init(struct ma35_drm *priv)
 	}
 
 	drm_crtc_enable_color_mgmt(&crtc->drm_crtc, 0, false, MA35_GAMMA_TABLE_SIZE);
+
 	drm_crtc_helper_add(&crtc->drm_crtc, &ma35_crtc_helper_funcs);
 
 	return 0;

@@ -1,0 +1,363 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * som-35d1f-2xx.dts - Device Tree file for the SOM-35D1F w/ 2xx EMAC Carriers.
+ *
+ * Copyright (C) 2023 EMAC Inc.
+ *
+ */
+
+/dts-v1/;
+#include "som35d1f.dtsi"
+
+
+/*
+ remove the panel that they have upstream its driver is setup for compatible = "avic,tm070ddh03", "panel-dpi";
+ so we delete and create the fema_panel below
+ https://github.com/OpenNuvoton/MA35D1_linux-6.6.y/blob/master/arch/arm64/boot/dts/nuvoton/ma35d1.dtsi#L1733
+*/
+/delete-node/ &panel;
+
+/ {
+	model = "EMAC SOM-35D1F with SOM-255";
+	compatible = "emac,som35d1f", "nuvoton,ma35d1";
+
+	reserved-memory {
+		display_buf: display_buf@0 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x8C800000 0x0 0x3000000>; /* 48MiB */
+			no-map;
+		};
+		vc8k_buf: vc8k_buf@0 {
+			reg = <0x0 0x8A800000 0x0 0x2000000>; /* 32MiB */
+			no-map;
+		};
+		gc520l_buf: gc520l_buf@0 {
+			reg = <0x0 0x8A000000 0x0 0x800000>; /* 8MiB */
+			no-map;
+		};
+		rproc_buf: rproc_buf@0 {
+			reg = <0x0 0x80020000 0x0 0x60000>; /* 384KB */
+			no-map;
+		};
+	};
+
+	wlan_en_reg: fixedregulator {
+		compatible = "regulator-fixed";
+		regulator-name = "wlan-en-regulator";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		startup-delay-us = <70000>;
+		gpio = <&gpio_expander 1 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
+	reg_1p5v: regulator0 {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-1.5V";
+		regulator-min-microvolt = <1500000>;
+		regulator-max-microvolt = <1500000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	reg_1p8v: regulator1 {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-1.8V";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	reg_3p3_vcc: regulator2 {
+		compatible = "regulator-fixed";
+		regulator-name = "fixed-3.3V";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	pcfg_wl1837: pcfg_wl1837 {
+		slew-rate = <1>;        /* Normal slew rate (balanced speed/EMI) */
+		input-schmitt-enable;   /* Enable Schmitt trigger for noise immunity */
+		bias-disable;           /* No pull-up/pull-down (module handles biasing) */
+		power-source = <3300>;  /* 3.3V I/O voltage (common for Bluetooth modules) */
+		drive-strength = <7>;   /* Medium-high drive strength (adjust based on trace length) */
+	};
+
+	audio_clk1: audio_clk1 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <12288000>;
+	};
+
+	// The regulator for the bridge and panel.
+	lvds_3v3_reg: fixedregulator {
+		compatible = "regulator-fixed";
+		regulator-name = "lvds-3v3-en-regulator";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		startup-delay-us = <70000>;
+		gpio = <&gpio_expander 9 GPIO_ACTIVE_HIGH>;  // Issue this expanger lives on i2c which comes up after DRM
+		// enable-active-high;
+		regulator-always-on; // hack to test the regulators
+		regulator-boot-on;   // hack to test the regulators
+		status = "okay";
+	};
+
+	// The backlight.
+	pwm_backlight: backlight {
+		compatible = "pwm-backlight";
+		brightness-levels = <0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19
+		20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42
+		43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65
+		66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88
+		89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108
+		109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125
+		126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142
+		143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159
+		160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176
+		177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 192 193
+		194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210
+		211 212 213 214 215 216 217 218 219 220 221 222 223 224 225 226 227
+		228 229 230 231 232 233 234 235 236 237 238 239 240 241 242 243 244
+		245 246 247 248 249 250 251 252 253 254 255
+		>;
+		default-brightness-level = <128>;
+		pwms = <&epwm2 0 50000>;
+		enable-gpios = <&gpio_expander 0 GPIO_ACTIVE_HIGH>; // again the i2c and race
+		status = "okay";
+	};
+
+	// the bridge slash endcoder
+	// Ref des: U13
+	// Chip: sn65lvds84aq-q1
+	// Datasheet: https://www.ti.com/lit/ds/symlink/sn65lvds84aq-q1.pdf
+	// Note: The SN65LVDS84AQ datasheet says the transmitter loads D0–D20 on the falling edge of CLKIN; the setup/hold table also specifies data valid before and after CLKIN↓, with 3 ns setup and 1.5 ns hold.
+	lvds_bridge: bridge-lvds {
+		compatible = "lvds-encoder";
+		power-supply = <&lvds_3v3_reg>;
+		status = "okay";
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				bridge_in: endpoint {
+					remote-endpoint = <&dpi_out>;
+				};
+			};
+			port@1 {
+				reg = <1>;
+				bridge_out: endpoint {
+					remote-endpoint = <&panel_in>;
+				};
+			};
+		};
+	};
+
+	// This is the gm800480d-70 That I defined in simple panel
+	// Refdes: HDR6
+	// Chip: Fema GM800480D-70-TTX2NLW panel
+	// datasheet -> https://femaelectronics.com/wp-content/uploads/datasheet/GM800480D-70-TTX2NLW-HTL.pdf
+	// NOTES: 40 pin connectror after the bridge. and where the tsc2004 comes in from i2c
+	fema_panel: panel-fema {
+		compatible = "fema,gm800480d-70";
+		backlight = <&pwm_backlight>;
+		power-supply = <&lvds_3v3_reg>;
+		// data-mapping = "jedec";
+		data-mapping = "jeida-18";
+
+		status = "okay";
+		port {
+			panel_in: endpoint@0 {
+				reg = <0>;
+				remote-endpoint = <&bridge_out>;
+			};
+		};
+	};
+
+};
+
+/*
+ * There is no driver for this anymore sadly :( . The vendor says "Its not worth their time and effort"
+ * However upstream examples still show this active(status="okay"). Might be a case for etnaviv drm if supported
+*/
+&gc520l {
+	// @40280000
+	// needs | compatible = "vivante,gc";
+	// current | clocks = <&clk GFX_GATE>;
+	// needs | clock-names: "core"; ?
+	// needs: | power-domains = <&gpc 1>;
+	// current | resets = <&reset MA35D1_RESET_GFX>;
+	memory-region = <&gc520l_buf>;
+	status = "okay";
+};
+
+// This driver needs to be installed correctly atm it is not...
+&vc8k {
+	fb_width = <800>;
+	fb_height = <480>;
+	memory-region = <&vc8k_buf>;
+	status = "okay";
+};
+
+&display {
+	memory-region = <&display_buf>;
+	// OPTIONS:  0: D16CFG1, 1: D16CFG2, 2: D16CFG3, 3: D18CFG1, 4: D18CFG2, 5: D24
+	// WHY: This is custom to set the DPI format as the vendors driver was hardcoded to D24
+	nuvoton,dpi-format = <4>;
+	status = "okay";
+	port {
+		// Why delete node
+		// Upstream went stright to a DPI panel.  We need to go to the bridge then the panel.
+		// for the bridge in and new panel we delete the endpoint and add ours
+		/delete-node/ endpoint@0;
+		dpi_out: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&bridge_in>;
+		};
+	};
+};
+
+&gmac1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_gmac1>;
+	phy-mode = "rmii";
+	phy-handle = <&eth_phy1>;
+	emac-phy-reset = <&gpio_expander_on_carrier 10 GPIO_ACTIVE_HIGH>;
+	mdio1: mdio{
+		compatible = "snps,dwmac-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		eth_phy1: ethernet-phy@1{
+			compatible = "ethernet-phy-id0007.0570";
+			vsc8531,vddmac = <3300>;
+	                vsc8531,edge-slowdown = <7>;
+			interrupts-extended = <&gpiog 0 IRQ_TYPE_EDGE_FALLING>;
+			reg = <0>;
+		};
+	};
+};
+
+&sdhci1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_wl1837 &pinctrl_wl1837_int>;
+	status = "okay";
+	/delete-property/ cd-gpios;
+	disable-wp;
+	vmmc-supply = <&wlan_en_reg>;
+	bus-width = <4>;
+	non-removable;
+	cap-power-off-card;
+	keep-power-in-suspend;
+	no-1-8-v;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	wlcore: wlcore@2 {
+		compatible = "ti,wl1837";
+		reg = <0x2>;
+		interrupt-parent = <&gpiog>;
+		interrupts = <0 IRQ_TYPE_EDGE_FALLING>;
+	};
+};
+
+&i2c1 {
+	gpio_expander_on_carrier: mirochip_gpio_expander_on_carrier@21 {
+		compatible = "microchip,mcp23018";
+		reg = <0x21>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-names = "gpio_expander_on_carrier@21 irq";
+	};
+
+	//PCA9515ADP,118
+	eeprom_on_carrier: eeprom@51 {
+		compatible = "atmel,24c32";
+		pagesize = <32>;
+		reg = <0x51>;
+		status = "okay";
+	};
+
+	sgtl5000: codec@0a {
+		compatible = "fsl,sgtl5000";
+		reg = <0x0a>;
+		#sound-dai-cells = <0>;
+		VDDA-supply = <&reg_3p3_vcc>;
+		VDDIO-supply = <&reg_3p3_vcc>;
+		VDDD-supply = <&reg_1p5v>;
+		clocks = <&audio_clk1>;
+		status = "okay";
+	};
+};
+
+&uart3 {
+	uart-has-rtscts;
+	bluetooth {
+		compatible = "ti,wl1837-st";
+		enable-gpios = <&gpio_expander 2 GPIO_ACTIVE_HIGH>;
+		/* The highest supported baud rate for SoM-35d1f */
+		max-speed = <912600>;
+	};
+};
+
+// Audio
+&i2s0{
+	status = "okay";
+};
+
+&i2s_pcm{
+	status = "okay";
+};
+
+&sound {
+	status = "okay";
+};
+
+
+&pinctrl {
+	gmac1 {
+		pinctrl_gmac1: gmac1grp{
+			nuvoton,pins =
+				<SYS_GPF_MFPL_PF0MFP_RMII1_MDC          &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPL_PF1MFP_RMII1_MDIO         &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPL_PF2MFP_RMII1_TXEN         &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPL_PF3MFP_RMII1_TXD0         &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPL_PF4MFP_RMII1_TXD1         &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPL_PF5MFP_RMII1_REFCLK       &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPL_PF6MFP_RMII1_CRSDV        &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPL_PF7MFP_RMII1_RXD0         &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPH_PF8MFP_RMII1_RXD1         &pcfg_emac_3_3V>,
+				<SYS_GPF_MFPH_PF9MFP_RMII1_RXERR        &pcfg_emac_3_3V>;
+		};
+	};
+	wifi {
+		pinctrl_wl1837:wl1837grp{
+			nuvoton,pins =
+				<SYS_GPJ_MFPL_PJ5MFP_SD1_nCD    &pcfg_default>,
+				<SYS_GPJ_MFPL_PJ6MFP_SD1_CMD    &pcfg_sdhci_drive2_3_3V>,
+				<SYS_GPJ_MFPL_PJ7MFP_SD1_CLK    &pcfg_sdhci_drive2_3_3V>,
+				<SYS_GPJ_MFPH_PJ8MFP_SD1_DAT0   &pcfg_sdhci_drive2_3_3V>,
+				<SYS_GPJ_MFPH_PJ9MFP_SD1_DAT1   &pcfg_sdhci_drive2_3_3V>,
+				<SYS_GPJ_MFPH_PJ10MFP_SD1_DAT2  &pcfg_sdhci_drive2_3_3V>,
+				<SYS_GPJ_MFPH_PJ11MFP_SD1_DAT3  &pcfg_sdhci_drive2_3_3V>;
+		};
+		pinctrl_wl1837_int:wl1837grp_int{
+			nuvoton,pins =
+				<SYS_GPG_MFPL_PG0MFP_GPIO    &pcfg_default>;
+		};
+	};
+	uart3 {
+		pinctrl_uart3: uartgrp3{
+			nuvoton,pins =
+				<SYS_GPA_MFPL_PA4MFP_UART3_nCTS     &pcfg_wl1837>,
+				<SYS_GPA_MFPL_PA5MFP_UART3_nRTS     &pcfg_wl1837>,
+				<SYS_GPA_MFPL_PA6MFP_UART3_RXD      &pcfg_wl1837>,
+				<SYS_GPA_MFPL_PA7MFP_UART3_TXD      &pcfg_wl1837>;
+		};
+	};
+};
+

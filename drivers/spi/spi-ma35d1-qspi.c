@@ -118,7 +118,6 @@ struct nuvoton_spi {
 	struct spi_controller           *host;
 	struct device                   *dev;
 	struct nuvoton_qspi_info	*pdata;
-	struct mutex                    mutex_lock;
 	spinlock_t                      lock;
 	struct resource                 *res;
 	struct ma35d1_dma_done          dma_slave_rxdone;
@@ -821,10 +820,11 @@ static int nuvoton_spi_mem_exec_op(struct spi_mem *mem,
                                    const struct spi_mem_op *op)
 {
 	struct nuvoton_spi *nuvoton = spi_controller_get_devdata(mem->spi->controller);
+	unsigned long flags;
 	int i, ret;
 	u8 addr[8];
 
-	mutex_lock(&nuvoton->mutex_lock);
+	spin_lock_irqsave(&nuvoton->lock, flags);
 
 	ret = nuvoton_spi_set_freq(nuvoton, mem->spi->max_speed_hz);
 	if (ret) {
@@ -887,7 +887,7 @@ out:
 
 	nuvoton_spi_set_cs(mem->spi, 1); //Deactivate CS
 
-	mutex_unlock(&nuvoton->mutex_lock);
+	spin_unlock_irqrestore(&nuvoton->lock, flags);
 
 	return ret;
 }
@@ -1011,7 +1011,6 @@ static int nuvoton_spi_probe(struct platform_device *pdev)
 	nuvoton->dev = &pdev->dev;
 	nuvoton->host = host;
 	spin_lock_init(&nuvoton->lock);
-	mutex_init(&nuvoton->mutex_lock);
 
 	if (nuvoton->pdata == NULL) {
 		dev_err(&pdev->dev, "No platform data supplied\n");
