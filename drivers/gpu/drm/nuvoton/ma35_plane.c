@@ -710,6 +710,7 @@ static int ma35_layer_create_properties(struct ma35_drm *priv,
 	struct drm_device *drm_dev = &priv->drm_dev;
 	struct drm_mode_config *mode_config = &drm_dev->mode_config;
 	struct drm_plane *drm_plane = &layer->drm_plane;
+	u32 swizzle = MA35_SWIZZLE_ARGB;
 	int ret = 0;
 
 	layer->formats = ma35_layer_formats;
@@ -769,8 +770,12 @@ static int ma35_layer_create_properties(struct ma35_drm *priv,
 			drm_err(drm_dev, "Failed to create swizzle property\n");
 			return -ENOMEM;
 		}
-		drm_object_attach_property(&drm_plane->base, layer->swizzle_prop, MA35_SWIZZLE_ARGB);
-		layer->config.swizzle = MA35_SWIZZLE_ARGB;
+		/* D24 DATA0-7 are blue; this carrier wires them to U13 red. */
+		if (drm_plane->type == DRM_PLANE_TYPE_PRIMARY &&
+		    of_machine_is_compatible("emac,som35d1f-255gs-7-inch"))
+			swizzle = MA35_SWIZZLE_ABGR;
+		drm_object_attach_property(&drm_plane->base, layer->swizzle_prop, swizzle);
+		layer->config.swizzle = swizzle;
 	}
 
 	if (ma35_plane_properties[drm_plane->type].colorkey) {

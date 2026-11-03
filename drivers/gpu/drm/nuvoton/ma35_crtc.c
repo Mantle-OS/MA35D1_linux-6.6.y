@@ -214,7 +214,7 @@ static u32 ma35_crtc_get_bus_flags(struct ma35_drm *priv,
 
 	if (!bus_flags) {
 		drm_info(drm_dev, "No connector bus_flags; using temporary fallback\n");
-		bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
+		bus_flags = DRM_BUS_FLAG_DE_HIGH;
 	}
 
 	drm_dbg(drm_dev,
@@ -246,13 +246,10 @@ static void ma35_crtc_program_panel_config(struct ma35_drm *priv,
 	}
 
 	/*
-	 * SN65LVDS84AQ loads input data on CLKIN falling edge.
-	 * During bring-up, SOM-255 may force PIXDATA_DRIVE_NEGEDGE until
-	 * bridge/panel bus flag propagation is verified.
+	 * PANEL_CONFIG[5] inverts RGB pin levels; it is not a pixel launch edge
+	 * selector. Keep data non-inverted. Clock polarity is a separate field
+	 * and remains positive for the measured SOM-255 7-inch configuration.
 	 */
-	if (bus_flags & DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE){
-		reg |= MA35_PANEL_DATA_POLARITY;
-	}
 
 	priv->startup_panel_config = reg;
 	ma35_bringup_write(priv, MA35_PANEL_CONFIG, 0, "PANEL_CONFIG held disabled");
@@ -454,8 +451,8 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	/* Signals */
 	bus_flags = ma35_crtc_get_bus_flags(priv, connector);
 
-	drm_info(drm_dev, "TEST: connector bus_flags=0x%x\n", bus_flags);
-	bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
+	drm_info(drm_dev, "MA35-INIT connector bus_flags=0x%x; RGB data non-inverted\n",
+		 bus_flags);
 
 	ma35_crtc_program_panel_config(priv, bus_flags);
 

@@ -45,6 +45,8 @@
 };
 
 &display {
+	/* U13 takes bits 2-7 of each eight-bit RGB output group. */
+	nuvoton,dpi-format = <5>;
 	status = "okay";
 };
 
