@@ -38,6 +38,11 @@ static unsigned int bringup_debug_commits = 8;
 module_param(bringup_debug_commits, uint, 0644);
 MODULE_PARM_DESC(bringup_debug_commits, "Trace the first N display commits (default 8; 0 disables)");
 
+/* Opt-in constant pixel source for a separately identified cold-boot test. */
+bool ma35_bringup_clear_test;
+module_param_named(bringup_clear_test, ma35_bringup_clear_test, bool, 0444);
+MODULE_PARM_DESC(bringup_clear_test, "Output opaque red from the primary clear register (default off)");
+
 bool ma35_bringup_debug(struct ma35_drm *priv)
 {
 	return bringup_debug_commits &&
@@ -485,6 +490,7 @@ static int ma35_drm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, priv);
 	drm_dev = &priv->drm_dev;
 	priv->regmap = regmap;
+	priv->irq = irq;
 	atomic_set(&priv->bringup_commits, 0);
 	INIT_LIST_HEAD(&priv->layers_list);
 

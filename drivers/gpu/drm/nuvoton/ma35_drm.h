@@ -113,6 +113,7 @@ struct ma35_drm {
 	 * the CRTC, plane, and IRQ paths to access MA35_* registers.
 	 */
 	struct regmap *regmap;
+	int irq;
 	atomic_t bringup_commits;
 
 	/*
@@ -179,6 +180,7 @@ struct ma35_drm {
 	struct reset_control *reset;
 };
 
+extern bool ma35_bringup_clear_test;
 bool ma35_bringup_debug(struct ma35_drm *priv);
 void ma35_bringup_dump(struct ma35_drm *priv, const char *stage);
 void ma35_bringup_write(struct ma35_drm *priv, u32 reg, u32 val,

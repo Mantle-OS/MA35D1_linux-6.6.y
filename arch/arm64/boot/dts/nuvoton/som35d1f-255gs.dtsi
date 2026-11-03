@@ -79,11 +79,11 @@
 		regulator-name = "lvds-3v3-en-regulator";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		startup-delay-us = <70000>;
+		/* Panel VCC rise <= 10 ms; video must follow within 50 ms. */
+		startup-delay-us = <10000>;
+		off-on-delay-us = <200000>;
 		gpio = <&gpio_expander 9 GPIO_ACTIVE_HIGH>;  // Issue this expanger lives on i2c which comes up after DRM
 		// enable-active-high;
-		regulator-always-on;
-		regulator-boot-on;
 		status = "disabled";
 	};
 
@@ -118,7 +118,8 @@
 	// Note: The SN65LVDS84AQ datasheet says the transmitter loads D0–D20 on the falling edge of CLKIN; the setup/hold table also specifies data valid before and after CLKIN↓, with 3 ns setup and 1.5 ns hold.
 	lvds_bridge: bridge-lvds {
 		compatible = "lvds-encoder";
-		power-supply = <&lvds_3v3_reg>;
+		/* U13 Vcc is the main carrier 3.3 V rail, not U12 output. */
+		power-supply = <&reg_3p3_vcc>;
 		status = "disabled";
 		ports {
 			#address-cells = <1>;

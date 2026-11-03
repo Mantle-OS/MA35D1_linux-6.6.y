@@ -9,6 +9,7 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/types.h>
@@ -288,6 +289,11 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	u32 bus_flags;
 	u32 reg, format, bpp;
 	u32 fb_config = MA35_PRIMARY_RESET;
+	static const u32 counter_select[] = { 0, 1, 4, 5 };
+	u32 counter[2][ARRAY_SIZE(counter_select)] = { { 0 } };
+	u32 irq_enable;
+	bool counters_ok = true;
+	int pass, j;
 	dma_addr_t dma;
 	int i, size, ret;
 
@@ -538,6 +544,13 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 				goto primary_init_failed;
 		}
 	}
+	if (ma35_bringup_clear_test && fb) {
+		ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CLEARVALUE, 0xffff0000);
+		if (ret)
+			goto primary_init_failed;
+		fb_config |= MA35_PRIMARY_CLEAR;
+		drm_info(drm_dev, "MA35-TEST opaque-red pixel source enabled at startup\n");
+	}
 	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, fb_config);
 	drm_info(drm_dev,
 		 "MA35-INIT start primary=%u FB_CONFIG=%#010x ret=%d\n",
@@ -547,6 +560,50 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 
 	// DEBUG FOR NOW
 	// ma35_crtc_dump_regs(priv, "BEFORE vblank_on"); // remove later or check debug flag
+	/*
+	 * The IRQ path reads this selector as the hardware frame counter.
+	 * Sample only before vblank_on, with the display IRQ verified masked,
+	 * and restore selector 5 before DRM can consume it.
+	 */
+	if (!ma35_bringup_debug(priv))
+		goto counters_done;
+	ret = regmap_read(priv->regmap, MA35_DISPLAY_INTRENABLE, &irq_enable);
+	if (!ret && !irq_enable) {
+		/* Drain a handler already in flight before changing its selector. */
+		synchronize_irq(priv->irq);
+		for (pass = 0; pass < 2 && counters_ok; pass++) {
+			for (j = 0; j < ARRAY_SIZE(counter_select); j++) {
+				ret = regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT,
+						   counter_select[j]);
+				if (!ret)
+					ret = regmap_read(priv->regmap, MA35_DEBUG_COUNTER_VALUE,
+							  &counter[pass][j]);
+				if (ret) {
+					counters_ok = false;
+					break;
+				}
+			}
+			/* Always restore, including a failed sample. */
+			ret = regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT, 5);
+			if (ret) {
+				drm_err(drm_dev, "MA35-COUNT restore frame selector failed=%d\n", ret);
+				goto primary_init_failed;
+			}
+			if (pass == 0 && counters_ok)
+				usleep_range(20000, 25000);
+		}
+		if (counters_ok)
+			for (j = 0; j < ARRAY_SIZE(counter_select); j++)
+				drm_info(drm_dev,
+					 "MA35-COUNT selector=%u before=%u after=%u delta=%u (20-25ms window)\n",
+					 counter_select[j], counter[0][j], counter[1][j],
+					 counter[1][j] - counter[0][j]);
+		else
+			drm_info(drm_dev, "MA35-COUNT sample failed; frame selector restored\n");
+	} else {
+		drm_info(drm_dev, "MA35-COUNT skipped: display IRQ not masked or read failed ret=%d\n", ret);
+	}
+counters_done:
 	ma35_bringup_dump(priv, "crtc-before-vblank-on");
 	drm_crtc_vblank_on(drm_crtc);
 	// ma35_crtc_dump_regs(priv, "AFTER vblank_on"); // remove later or check debug flag

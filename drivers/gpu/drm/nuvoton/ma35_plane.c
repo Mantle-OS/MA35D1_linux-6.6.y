@@ -419,6 +419,9 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 			"MA35-BRINGUP PLANE PRIMARY CONFIG BUILD: format=%u bpp=%u swizzle=%u config=0x%08x\n",
 			format, bpp, layer->config.swizzle, reg);
 
+		if (ma35_bringup_clear_test)
+			reg |= MA35_PRIMARY_CLEAR;
+
 		ma35_bringup_write(priv, MA35_FRAMEBUFFER_CONFIG, reg, "FB_CONFIG");
 
 		reg = FIELD_PREP(MA35_LAYER_FB_HEIGHT, fb->height) |
@@ -429,7 +432,8 @@ static void ma35_plane_atomic_update(struct drm_plane *drm_plane,
 		regmap_write(priv->regmap, MA35_FRAMEBUFFER_BGCOLOR, layer->config.background);
 
 		// clear value, unused
-		regmap_write(priv->regmap, MA35_FRAMEBUFFER_CLEARVALUE, 0);
+		regmap_write(priv->regmap, MA35_FRAMEBUFFER_CLEARVALUE,
+			      ma35_bringup_clear_test ? 0xffff0000 : 0);
 
 		// colorkey
 		regmap_write(priv->regmap, MA35_FRAMEBUFFER_COLORKEY, layer->config.colorkeylo);

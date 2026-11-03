@@ -46,7 +46,9 @@ static void lvds_codec_enable(struct drm_bridge *bridge)
 	struct lvds_codec *lvds_codec = to_lvds_codec(bridge);
 	int ret;
 
+	dev_info(lvds_codec->dev, "LVDS-SEQ bridge supply enable begin\n");
 	ret = regulator_enable(lvds_codec->vcc);
+	dev_info(lvds_codec->dev, "LVDS-SEQ bridge supply enable ret=%d\n", ret);
 	if (ret) {
 		dev_err(lvds_codec->dev,
 			"Failed to enable regulator \"vcc\": %d\n", ret);
@@ -55,6 +57,7 @@ static void lvds_codec_enable(struct drm_bridge *bridge)
 
 	if (lvds_codec->powerdown_gpio)
 		gpiod_set_value_cansleep(lvds_codec->powerdown_gpio, 0);
+	dev_info(lvds_codec->dev, "LVDS-SEQ bridge enable complete\n");
 }
 
 static void lvds_codec_disable(struct drm_bridge *bridge)
@@ -62,10 +65,13 @@ static void lvds_codec_disable(struct drm_bridge *bridge)
 	struct lvds_codec *lvds_codec = to_lvds_codec(bridge);
 	int ret;
 
+	dev_info(lvds_codec->dev, "LVDS-SEQ bridge disable enter\n");
 	if (lvds_codec->powerdown_gpio)
 		gpiod_set_value_cansleep(lvds_codec->powerdown_gpio, 1);
 
+	dev_info(lvds_codec->dev, "LVDS-SEQ bridge supply disable begin\n");
 	ret = regulator_disable(lvds_codec->vcc);
+	dev_info(lvds_codec->dev, "LVDS-SEQ bridge supply disable ret=%d\n", ret);
 	if (ret)
 		dev_err(lvds_codec->dev,
 			"Failed to disable regulator \"vcc\": %d\n", ret);

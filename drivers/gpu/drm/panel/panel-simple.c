@@ -289,6 +289,10 @@ static int panel_simple_disable(struct drm_panel *panel)
 {
 	struct panel_simple *p = to_panel_simple(panel);
 
+	if (of_device_is_compatible(p->base.dev->of_node, "fema,gm800480d-70"))
+		dev_info(p->base.dev, "FEMA-SEQ disable enter prepared=%u enabled=%u\n",
+			 p->prepared, p->enabled);
+
 	if (!p->enabled)
 		return 0;
 
@@ -304,8 +308,20 @@ static int panel_simple_suspend(struct device *dev)
 {
 	struct panel_simple *p = dev_get_drvdata(dev);
 
+	if (of_device_is_compatible(p->base.dev->of_node, "fema,gm800480d-70"))
+		dev_info(p->base.dev, "FEMA-SEQ suspend enter prepared=%u enabled=%u\n",
+			 p->prepared, p->enabled);
+
 	gpiod_set_value_cansleep(p->enable_gpio, 0);
-	regulator_disable(p->supply);
+	if (of_device_is_compatible(dev->of_node, "fema,gm800480d-70")) {
+		int ret = regulator_disable(p->supply);
+
+		dev_info(dev, "FEMA-SEQ panel supply disable ret=%d\n", ret);
+		if (ret)
+			return ret;
+	} else {
+		regulator_disable(p->supply);
+	}
 	p->unprepared_time = ktime_get_boottime();
 
 	kfree(p->edid);
@@ -319,15 +335,25 @@ static int panel_simple_unprepare(struct drm_panel *panel)
 	struct panel_simple *p = to_panel_simple(panel);
 	int ret;
 
+	if (of_device_is_compatible(p->base.dev->of_node, "fema,gm800480d-70"))
+		dev_info(p->base.dev, "FEMA-SEQ unprepare enter prepared=%u enabled=%u\n",
+			 p->prepared, p->enabled);
+
 	/* Unpreparing when already unprepared is a no-op */
 	if (!p->prepared)
 		return 0;
 
 	pm_runtime_mark_last_busy(panel->dev);
-	ret = pm_runtime_put_autosuspend(panel->dev);
+	/* FEMA requires power removal promptly after video stops. */
+	if (of_device_is_compatible(panel->dev->of_node, "fema,gm800480d-70"))
+		ret = pm_runtime_put_sync_suspend(panel->dev);
+	else
+		ret = pm_runtime_put_autosuspend(panel->dev);
 	if (ret < 0)
 		return ret;
 	p->prepared = false;
+	if (of_device_is_compatible(panel->dev->of_node, "fema,gm800480d-70"))
+		dev_info(panel->dev, "FEMA-SEQ unprepare complete ret=%d\n", ret);
 
 	return 0;
 }
@@ -337,9 +363,17 @@ static int panel_simple_resume(struct device *dev)
 	struct panel_simple *p = dev_get_drvdata(dev);
 	int err;
 
+	if (of_device_is_compatible(p->base.dev->of_node, "fema,gm800480d-70"))
+		dev_info(p->base.dev, "FEMA-SEQ resume enter prepared=%u enabled=%u\n",
+			 p->prepared, p->enabled);
+
 	panel_simple_wait(p->unprepared_time, p->desc->delay.unprepare);
 
+	if (of_device_is_compatible(dev->of_node, "fema,gm800480d-70"))
+		dev_info(dev, "FEMA-SEQ panel supply enable begin\n");
 	err = regulator_enable(p->supply);
+	if (of_device_is_compatible(dev->of_node, "fema,gm800480d-70"))
+		dev_info(dev, "FEMA-SEQ panel supply enable ret=%d\n", err);
 	if (err < 0) {
 		dev_err(dev, "failed to enable supply: %d\n", err);
 		return err;
@@ -358,6 +392,10 @@ static int panel_simple_prepare(struct drm_panel *panel)
 	struct panel_simple *p = to_panel_simple(panel);
 	int ret;
 
+	if (of_device_is_compatible(p->base.dev->of_node, "fema,gm800480d-70"))
+		dev_info(p->base.dev, "FEMA-SEQ prepare enter prepared=%u enabled=%u\n",
+			 p->prepared, p->enabled);
+
 	/* Preparing when already prepared is a no-op */
 	if (p->prepared)
 		return 0;
@@ -369,6 +407,8 @@ static int panel_simple_prepare(struct drm_panel *panel)
 	}
 
 	p->prepared = true;
+	if (of_device_is_compatible(panel->dev->of_node, "fema,gm800480d-70"))
+		dev_info(panel->dev, "FEMA-SEQ prepare complete\n");
 
 	return 0;
 }
@@ -377,6 +417,10 @@ static int panel_simple_enable(struct drm_panel *panel)
 {
 	struct panel_simple *p = to_panel_simple(panel);
 
+	if (of_device_is_compatible(p->base.dev->of_node, "fema,gm800480d-70"))
+		dev_info(p->base.dev, "FEMA-SEQ enable enter prepared=%u enabled=%u\n",
+			 p->prepared, p->enabled);
+
 	if (p->enabled)
 		return 0;
 
@@ -384,6 +428,10 @@ static int panel_simple_enable(struct drm_panel *panel)
 		msleep(p->desc->delay.enable);
 
 	p->enabled = true;
+	if (of_device_is_compatible(panel->dev->of_node, "fema,gm800480d-70"))
+		dev_info(panel->dev,
+			 "FEMA-SEQ enable delay=%u ms complete; returning for backlight enable\n",
+			 p->desc->delay.enable);
 
 	return 0;
 }
@@ -4155,6 +4203,11 @@ static const struct drm_display_mode fema_gm800480d_70_mode = {
 static const struct panel_desc fema_gm800480d_70 = {
 	.modes = &fema_gm800480d_70_mode,
 	.num_modes = 1,
+	.delay = {
+		/* Valid video before backlight; minimum power-off interval. */
+		.enable = 200,
+		.unprepare = 200,
+	},
 	.bpc = 6,
 	.size = {
 		.width = 152,
