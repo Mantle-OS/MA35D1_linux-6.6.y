@@ -115,6 +115,9 @@ struct ma35_drm {
 	struct regmap *regmap;
 	int irq;
 	atomic_t bringup_commits;
+	u32 startup_fb_config;
+	u32 startup_panel_config;
+	bool startup_prepared;
 
 	/*
 	 * List of MA35 hardware layers.

@@ -10,6 +10,8 @@
  */
 
 #include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/interrupt.h>
 #include <linux/types.h>
 #include <linux/of_graph.h>
 
@@ -24,6 +26,7 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 #include <drm/drm_simple_kms_helper.h>
+#include <drm/drm_vblank.h>
 
 #include "ma35_drm.h"
 
@@ -55,8 +58,116 @@ static void ma35_encoder_mode_set(struct drm_encoder *encoder,
 	// 	adjusted_mode->clock);
 }
 
+/* The KMS helper calls this after bridge-chain pre-enable/panel prepare. */
+static void ma35_encoder_atomic_enable(struct drm_encoder *encoder,
+				      struct drm_atomic_state *state)
+{
+	struct drm_device *drm_dev = encoder->dev;
+	struct ma35_drm *priv = ma35_drm(drm_dev);
+	struct drm_crtc *drm_crtc = drm_atomic_get_new_crtc_for_encoder(state, encoder);
+	static const u32 counter_select[] = { 0, 1, 4, 5 };
+	u32 counter[2][ARRAY_SIZE(counter_select)] = { { 0 } };
+	u32 irq_enable;
+	bool counters_ok = true;
+	int ret, pass, j;
+
+	if (!drm_crtc || !priv->startup_prepared) {
+		drm_err(drm_dev, "MA35-INIT encoder start skipped: no prepared CRTC\n");
+		return;
+	}
+
+	ret = regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT, 5);
+	if (ret)
+		goto encoder_enable_failed;
+	ret = regmap_write(priv->regmap, MA35_PANEL_CONFIG, priv->startup_panel_config);
+	if (ret)
+		goto encoder_enable_failed;
+	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, priv->startup_fb_config);
+	drm_info(drm_dev,
+		 "MA35-INIT encoder start after panel prepare PANEL_CONFIG=%#010x FB_CONFIG=%#010x ret=%d\n",
+		 priv->startup_panel_config, priv->startup_fb_config, ret);
+	if (ret)
+		goto encoder_enable_failed;
+	priv->startup_prepared = false;
+
+	/*
+	 * The IRQ path reads this selector as the hardware frame counter.
+	 * Sample only before vblank_on, with the display IRQ verified masked,
+	 * and restore selector 5 before DRM can consume it.
+	 */
+	if (!ma35_bringup_debug(priv))
+		goto counters_done;
+	ret = regmap_read(priv->regmap, MA35_DISPLAY_INTRENABLE, &irq_enable);
+	if (!ret && !irq_enable) {
+		/* Drain a handler already in flight before changing its selector. */
+		synchronize_irq(priv->irq);
+		for (pass = 0; pass < 2 && counters_ok; pass++) {
+			for (j = 0; j < ARRAY_SIZE(counter_select); j++) {
+				ret = regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT,
+						   counter_select[j]);
+				if (!ret)
+					ret = regmap_read(priv->regmap, MA35_DEBUG_COUNTER_VALUE,
+							  &counter[pass][j]);
+				if (ret) {
+					counters_ok = false;
+					break;
+				}
+			}
+			/* Always restore, including a failed sample. */
+			ret = regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT, 5);
+			if (ret) {
+				drm_err(drm_dev, "MA35-COUNT restore frame selector failed=%d\n", ret);
+				goto encoder_enable_failed;
+			}
+			if (pass == 0 && counters_ok)
+				usleep_range(20000, 25000);
+		}
+		if (counters_ok)
+			for (j = 0; j < ARRAY_SIZE(counter_select); j++)
+				drm_info(drm_dev,
+					 "MA35-COUNT selector=%u before=%u after=%u delta=%u (20-25ms window)\n",
+					 counter_select[j], counter[0][j], counter[1][j],
+					 counter[1][j] - counter[0][j]);
+		else
+			drm_info(drm_dev, "MA35-COUNT sample failed; frame selector restored\n");
+	} else {
+		drm_info(drm_dev, "MA35-COUNT skipped: display IRQ not masked or read failed ret=%d\n", ret);
+	}
+counters_done:
+	ma35_bringup_dump(priv, "encoder-before-vblank-on");
+	drm_crtc_vblank_on(drm_crtc);
+	return;
+
+encoder_enable_failed:
+	drm_err(drm_dev, "MA35-INIT encoder start failed ret=%d\n", ret);
+	/* Do not leave the physical output active after a partial enable. */
+	regmap_write(priv->regmap, MA35_PANEL_CONFIG, 0);
+	regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, 0);
+	priv->startup_prepared = false;
+}
+
+/* Runs after panel disable/backlight-off, before panel unprepare/power-off. */
+static void ma35_encoder_atomic_disable(struct drm_encoder *encoder,
+				       struct drm_atomic_state *state)
+{
+	struct ma35_drm *priv = ma35_drm(encoder->dev);
+	struct drm_crtc *drm_crtc = drm_atomic_get_old_crtc_for_encoder(state, encoder);
+	int panel_ret, fb_ret;
+
+	if (drm_crtc)
+		drm_crtc_vblank_off(drm_crtc);
+	panel_ret = regmap_write(priv->regmap, MA35_PANEL_CONFIG, 0);
+	fb_ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, 0);
+	priv->startup_prepared = false;
+	drm_info(encoder->dev,
+		 "MA35-INIT encoder stop before panel unprepare panel_ret=%d fb_ret=%d\n",
+		 panel_ret, fb_ret);
+}
+
 static const struct drm_encoder_helper_funcs ma35_encoder_helper_funcs = {
 	.atomic_mode_set = ma35_encoder_mode_set,
+	.atomic_enable = ma35_encoder_atomic_enable,
+	.atomic_disable = ma35_encoder_atomic_disable,
 };
 
 static void ma35_encoder_attach_crtc(struct ma35_drm *priv)

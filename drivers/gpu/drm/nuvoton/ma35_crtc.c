@@ -9,7 +9,6 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
-#include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/types.h>
@@ -255,12 +254,13 @@ static void ma35_crtc_program_panel_config(struct ma35_drm *priv,
 		reg |= MA35_PANEL_DATA_POLARITY;
 	}
 
-	ma35_bringup_write(priv, MA35_PANEL_CONFIG, reg, "MA35_PANEL_CONFIG");
+	priv->startup_panel_config = reg;
+	ma35_bringup_write(priv, MA35_PANEL_CONFIG, 0, "PANEL_CONFIG held disabled");
 	// ma35_reg_write_dbg(priv, MA35_PANEL_CONFIG, reg, "PANEL_CONFIG");
 	ma35_reg_read_dbg(priv, MA35_PANEL_CONFIG, "PANEL_CONFIG readback");
 
 
-	drm_dbg(drm_dev, "MA35_PANEL_CONFIG programmed: 0x%08x\n", reg);
+	drm_dbg(drm_dev, "MA35_PANEL_CONFIG pending encoder enable: 0x%08x\n", reg);
 }
 
 static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
@@ -289,16 +289,12 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 	u32 bus_flags;
 	u32 reg, format, bpp;
 	u32 fb_config = MA35_PRIMARY_RESET;
-	static const u32 counter_select[] = { 0, 1, 4, 5 };
-	u32 counter[2][ARRAY_SIZE(counter_select)] = { { 0 } };
-	u32 irq_enable;
-	bool counters_ok = true;
-	int pass, j;
 	dma_addr_t dma;
 	int i, size, ret;
 
 	new_state = drm_atomic_get_new_crtc_state(state, drm_crtc);
 	mode = &new_state->adjusted_mode;
+	priv->startup_prepared = false;
 
 	connector = priv->interface ? priv->interface->connector : NULL;
 	bridge = priv->interface ? priv->interface->bridge : NULL;
@@ -380,8 +376,8 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 
 	/*
 	 * The custom tail enables the CRTC before updating planes. Prepare the
-	 * initial primary working set here, with timing held stopped (bit 4=0),
-	 * and write the start bit only after all initial registers are ready.
+	 * initial primary working set here, with timing held stopped (bit 4=0).
+	 * The encoder starts it after the bridge chain prepares panel power.
 	 * Leave the later plane callback intact for this bring-up experiment.
 	 */
 	primary_state = drm_atomic_get_new_plane_state(state, drm_crtc->primary);
@@ -551,77 +547,17 @@ static void ma35_crtc_atomic_enable(struct drm_crtc *drm_crtc,
 		fb_config |= MA35_PRIMARY_CLEAR;
 		drm_info(drm_dev, "MA35-TEST opaque-red pixel source enabled at startup\n");
 	}
-	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, fb_config);
+	/* Keep bit 4 clear until bridge pre-enable has prepared panel power. */
+	reg = fb_config & ~MA35_PRIMARY_RESET;
+	ret = regmap_write(priv->regmap, MA35_FRAMEBUFFER_CONFIG, reg);
 	drm_info(drm_dev,
-		 "MA35-INIT start primary=%u FB_CONFIG=%#010x ret=%d\n",
-		 !!fb, fb_config, ret);
+		 "MA35-INIT prepared primary=%u FB_CONFIG=%#010x; output held for encoder enable ret=%d\n",
+		 !!fb, reg, ret);
 	if (ret)
 		goto primary_init_failed;
-
-	// DEBUG FOR NOW
-	// ma35_crtc_dump_regs(priv, "BEFORE vblank_on"); // remove later or check debug flag
-	/*
-	 * The IRQ path reads this selector as the hardware frame counter.
-	 * Sample only before vblank_on, with the display IRQ verified masked,
-	 * and restore selector 5 before DRM can consume it.
-	 */
-	if (!ma35_bringup_debug(priv))
-		goto counters_done;
-	ret = regmap_read(priv->regmap, MA35_DISPLAY_INTRENABLE, &irq_enable);
-	if (!ret && !irq_enable) {
-		/* Drain a handler already in flight before changing its selector. */
-		synchronize_irq(priv->irq);
-		for (pass = 0; pass < 2 && counters_ok; pass++) {
-			for (j = 0; j < ARRAY_SIZE(counter_select); j++) {
-				ret = regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT,
-						   counter_select[j]);
-				if (!ret)
-					ret = regmap_read(priv->regmap, MA35_DEBUG_COUNTER_VALUE,
-							  &counter[pass][j]);
-				if (ret) {
-					counters_ok = false;
-					break;
-				}
-			}
-			/* Always restore, including a failed sample. */
-			ret = regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT, 5);
-			if (ret) {
-				drm_err(drm_dev, "MA35-COUNT restore frame selector failed=%d\n", ret);
-				goto primary_init_failed;
-			}
-			if (pass == 0 && counters_ok)
-				usleep_range(20000, 25000);
-		}
-		if (counters_ok)
-			for (j = 0; j < ARRAY_SIZE(counter_select); j++)
-				drm_info(drm_dev,
-					 "MA35-COUNT selector=%u before=%u after=%u delta=%u (20-25ms window)\n",
-					 counter_select[j], counter[0][j], counter[1][j],
-					 counter[1][j] - counter[0][j]);
-		else
-			drm_info(drm_dev, "MA35-COUNT sample failed; frame selector restored\n");
-	} else {
-		drm_info(drm_dev, "MA35-COUNT skipped: display IRQ not masked or read failed ret=%d\n", ret);
-	}
-counters_done:
-	ma35_bringup_dump(priv, "crtc-before-vblank-on");
-	drm_crtc_vblank_on(drm_crtc);
-	// ma35_crtc_dump_regs(priv, "AFTER vblank_on"); // remove later or check debug flag
-
-	// ma35_reg_read_dbg(priv, MA35_DISPLAY_CURRENT_LOCATION, "CUR_LOC t0");
-	// udelay(1000);
-	// ma35_reg_read_dbg(priv, MA35_DISPLAY_CURRENT_LOCATION, "CUR_LOC t1");
-	// udelay(1000);
-	// ma35_reg_read_dbg(priv, MA35_DISPLAY_CURRENT_LOCATION, "CUR_LOC t2");
-
-	regmap_write(priv->regmap, MA35_DEBUG_COUNTER_SELECT, 5);
-	ma35_bringup_dump(priv, "crtc-enable-exit");
-	// ma35_reg_write_dbg(priv,
-	// 		MA35_DEBUG_COUNTER_SELECT, 5,
-	// 		"DEBUG_COUNTER_SELECT");
-	// ma35_reg_read_dbg(priv,
-	// 		MA35_DEBUG_COUNTER_VALUE,
-	// 		"DEBUG_COUNTER_VALUE");
+	priv->startup_fb_config = fb_config;
+	priv->startup_prepared = true;
+	ma35_bringup_dump(priv, "crtc-prepared-output-stopped");
 
 	return;
 
@@ -637,7 +573,6 @@ static void ma35_crtc_atomic_disable(struct drm_crtc *drm_crtc,
 	struct drm_device *drm_dev = drm_crtc->dev;
 
 	ma35_bringup_dump(priv, "crtc-disable-entry");
-	drm_crtc_vblank_off(drm_crtc);
 
 	/* Disable and clear CRTC bits. */
 	regmap_update_bits(priv->regmap, MA35_PANEL_CONFIG,
