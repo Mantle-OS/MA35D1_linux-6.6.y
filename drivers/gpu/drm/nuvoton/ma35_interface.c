@@ -44,9 +44,8 @@ static void ma35_encoder_mode_set(struct drm_encoder *encoder,
 
 	actual_rate = clk_get_rate(priv->dcupclk);
 	result = DIV_ROUND_UP(actual_rate, 1000);
-
 	drm_dbg(drm_dev,
-		Pixel clock: %d kHz; request: %d kHz\n",
+		"Pixel clock: %d kHz; request: %d kHz\n",
 		result,
 		adjusted_mode->clock);
 }
